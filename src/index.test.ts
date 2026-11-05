@@ -7,12 +7,15 @@ import {
 	BootstrapLoginError,
 	createCodeVerifier,
 	createFileTokenStore,
+	createTokenManager,
+	createTokenRefresher,
 	evaluateTokenState,
 	getHealthStatus,
 	type HealthStatus,
 	handleRequest,
 	parseTokenFile,
 	runBootstrapLogin,
+	TokenRefreshError,
 	TokenStoreError,
 } from "./index"
 
@@ -55,6 +58,31 @@ describe("Public surface", () => {
 		expect(createCodeVerifier(new Uint8Array(32))).toHaveLength(43)
 		expect(typeof runBootstrapLogin).toBe("function")
 		expect(BootstrapLoginError.prototype).toBeInstanceOf(Error)
+	})
+
+	it("exposes the Token Refresher and Token Manager through the package entry point", async () => {
+		const tokenFile = parseTokenFile({
+			issuer: "https://auth.example.com",
+			token_endpoint: "https://auth.example.com/token",
+			client_id: "client-abc",
+			resource: "https://api.example.com/mcp",
+			access_token: "access-token",
+			refresh_token: "refresh-token",
+			expires_at: 1_700_000_000_000,
+		})
+		const manager = createTokenManager({
+			store: {
+				async read() {
+					return tokenFile
+				},
+				async write() {},
+			},
+			refresher: async () => tokenFile,
+		})
+
+		expect(typeof createTokenRefresher).toBe("function")
+		expect(await manager.getAccessToken({ nowMs: 1_699_999_999_000 })).toBe("access-token")
+		expect(new TokenRefreshError("refresh_failed", "failed").code).toBe("refresh_failed")
 	})
 
 	it("exposes atomic Token File storage through the package entry point", async () => {
