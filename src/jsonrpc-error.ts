@@ -1,3 +1,5 @@
+import { isRecord } from "./is-record"
+
 const RUNBOOK_URL = "https://github.com/trajectonomics/infra/issues/3"
 
 const REVOKED_MESSAGE =
@@ -12,8 +14,8 @@ export function readJsonRpcId(body: Uint8Array | undefined): JsonRpcId {
 	if (body === undefined || body.byteLength === 0) return null
 	try {
 		const value: unknown = JSON.parse(new TextDecoder().decode(body))
-		if (typeof value !== "object" || value === null || Array.isArray(value)) return null
-		const id = (value as Record<string, unknown>)["id"]
+		if (!isRecord(value)) return null
+		const id = value["id"]
 		return typeof id === "string" || typeof id === "number" ? id : null
 	} catch {
 		return null

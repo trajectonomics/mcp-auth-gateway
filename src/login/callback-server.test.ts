@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test"
-import { connect } from "node:net"
+import { connect, createServer } from "node:net"
 import { networkInterfaces } from "node:os"
 import { type CallbackServer, startCallbackServer } from "./callback-server"
 import { BootstrapLoginError } from "./errors"
 
-function callbackUrl(server: CallbackServer, params: Record<string, string>): string {
-	const url = new URL(server.redirectUri)
+function callbackUrl(port: number, params: Record<string, string>): string {
+	const url = new URL(`http://127.0.0.1:${port}/callback`)
 	for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value)
 	return url.toString()
 }
@@ -30,6 +30,15 @@ function nonLoopbackIPv4(): string | undefined {
 	return undefined
 }
 
+async function reservePort(): Promise<number> {
+	const server = createServer()
+	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+	const address = server.address()
+	const port = typeof address === "object" && address ? address.port : 0
+	await new Promise<void>((resolve) => server.close(() => resolve()))
+	return port
+}
+
 async function settle(server: CallbackServer): Promise<unknown> {
 	try {
 		return await server.waitForCode()
@@ -38,11 +47,17 @@ async function settle(server: CallbackServer): Promise<unknown> {
 	}
 }
 
+async function listening(state = "state-xyz"): Promise<{ port: number; server: CallbackServer }> {
+	const port = await reservePort()
+	return { port, server: startCallbackServer({ port, state }) }
+}
+
 describe("Loopback callback server", () => {
 	it("captures the authorization code and responds with a completion page", async () => {
-		const server = startCallbackServer({ port: 0, state: "state-xyz" })
+		const { port, server } = await listening()
 		try {
-			const response = await fetch(callbackUrl(server, { code: "auth-code", state: "state-xyz" }))
+			expect(Object.isFrozen(server)).toBe(true)
+			const response = await fetch(callbackUrl(port, { code: "auth-code", state: "state-xyz" }))
 
 			expect(response.status).toBe(200)
 			expect(await response.text()).toContain("Bootstrap Login complete")
@@ -53,20 +68,18 @@ describe("Loopback callback server", () => {
 	})
 
 	it("rejects a state mismatch with 400 and keeps waiting for the real callback", async () => {
-		const server = startCallbackServer({ port: 0, state: "state-xyz" })
+		const { port, server } = await listening()
 		let settled = false
 		const waiting = server.waitForCode().finally(() => {
 			settled = true
 		})
 		try {
-			const mismatch = await fetch(
-				callbackUrl(server, { code: "attacker-code", state: "wrong-state" }),
-			)
+			const mismatch = await fetch(callbackUrl(port, { code: "attacker-code", state: "wrong" }))
 
 			expect(mismatch.status).toBe(400)
 			expect(settled).toBe(false)
 
-			const valid = await fetch(callbackUrl(server, { code: "auth-code", state: "state-xyz" }))
+			const valid = await fetch(callbackUrl(port, { code: "auth-code", state: "state-xyz" }))
 			expect(valid.status).toBe(200)
 			expect(await waiting).toBe("auth-code")
 		} finally {
@@ -75,11 +88,11 @@ describe("Loopback callback server", () => {
 	})
 
 	it("reports an authorization denial without capturing a code", async () => {
-		const server = startCallbackServer({ port: 0, state: "state-xyz" })
+		const { port, server } = await listening()
 		const waiting = settle(server)
 		try {
 			const response = await fetch(
-				callbackUrl(server, {
+				callbackUrl(port, {
 					error: "access_denied",
 					error_description: "operator cancelled",
 					state: "state-xyz",
@@ -96,8 +109,7 @@ describe("Loopback callback server", () => {
 	})
 
 	it("binds 127.0.0.1 only and releases the port on stop", async () => {
-		const server = startCallbackServer({ port: 0, state: "state-xyz" })
-		const port = Number(new URL(server.redirectUri).port)
+		const { port, server } = await listening()
 		const external = nonLoopbackIPv4()
 		try {
 			expect(await connectable("127.0.0.1", port)).toBe(true)
@@ -110,10 +122,11 @@ describe("Loopback callback server", () => {
 	})
 
 	it("does not answer paths other than GET /callback", async () => {
-		const server = startCallbackServer({ port: 0, state: "state-xyz" })
+		const { port, server } = await listening()
+		const callback = `http://127.0.0.1:${port}/callback`
 		try {
-			const wrongPath = await fetch(new URL("/other", server.redirectUri))
-			const wrongMethod = await fetch(server.redirectUri, { method: "POST" })
+			const wrongPath = await fetch(`http://127.0.0.1:${port}/other`)
+			const wrongMethod = await fetch(callback, { method: "POST" })
 
 			expect(wrongPath.status).toBe(404)
 			expect(wrongMethod.status).toBe(404)

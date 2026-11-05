@@ -23,13 +23,28 @@ describe("Gateway configuration", () => {
 			UPSTREAM_URL: "https://example.com/mcp",
 			TOKEN_FILE: "/tmp/tokens.json",
 			PORT: "9999",
-			HOST: "0.0.0.0",
+			HOST: "127.0.0.2",
 		})
 
 		expect(config.upstreamUrl).toBe("https://example.com/mcp")
 		expect(config.tokenFile).toBe("/tmp/tokens.json")
 		expect(config.port).toBe(9999)
-		expect(config.host).toBe("0.0.0.0")
+		expect(config.host).toBe("127.0.0.2")
+	})
+
+	it("falls back to loopback for an empty host", () => {
+		const config = loadGatewayConfig({ GATEWAY_INTERNAL_SECRET: SECRET, HOST: "" })
+
+		expect(config.host).toBe("127.0.0.1")
+	})
+
+	it("refuses a wildcard host", () => {
+		for (const host of ["0.0.0.0", "::", "[::]"]) {
+			const caught = catchError(() =>
+				loadGatewayConfig({ GATEWAY_INTERNAL_SECRET: SECRET, HOST: host }),
+			)
+			expect(caught.code).toBe("host_invalid")
+		}
 	})
 
 	it("refuses a missing Gateway Secret", () => {

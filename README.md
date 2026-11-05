@@ -19,10 +19,10 @@ bun run build
 ## Getting Started
 
 ```typescript
-import { handleRequest } from "@trajectonomics/mcp-auth-gateway"
+import { evaluateTokenState, parseTokenFile } from "@trajectonomics/mcp-auth-gateway"
 
-const response = handleRequest("/health", "mcp-auth-gateway", Date.now())
-console.log(response.status)
+const tokenFile = parseTokenFile(await Bun.file("/data/tokens.json").json())
+console.log(evaluateTokenState(tokenFile, Date.now())) // valid | expiring_soon | invalid
 ```
 
 ---
@@ -33,12 +33,12 @@ The gateway ships as a multi-architecture (`linux/amd64`, `linux/arm64`) image p
 pushes to `main` and on `v*` tags:
 
 ```text
-ghcr.io/trajectonomics/mcp-auth-gateway:latest
+ghcr.io/trajectonomics/mcp-auth-gateway:sha-1a2b3c4
 ```
 
-Use the immutable `sha-<short>` tag for a pinned deployment; `latest` tracks `main` and `v*` tags also
-publish semver tags. The image runs as the unprivileged `bun` user (UID 1000) with `CMD ["bun",
-"dist/server/main.mjs"]` and no shell wrapper.
+Deploy the immutable `sha-<short>` tag; `latest` tracks `main` and `v*` tags also publish semver tags.
+The reference Compose file and this documentation never pin `latest`. The image runs as the
+unprivileged `bun` user (UID 1000) with `CMD ["bun", "dist/server/main.mjs"]` and no shell wrapper.
 
 Required configuration:
 
@@ -47,26 +47,30 @@ Required configuration:
   never commit it.
 - `TOKEN_FILE` (default `/data/tokens.json`) and a writable **directory** volume mounted at `/data`.
   The Token File is replaced by atomic rename, so mount the directory, never a single file.
-- `PORT` (default `8080`) and `HOST` (default `127.0.0.1`). Never bind `0.0.0.0` (ADR 0002).
+- `PORT` (default `8080`) and `HOST` (default `127.0.0.1`). The gateway refuses a wildcard
+  `HOST` (`0.0.0.0`, `::`, `[::]`), because ADR 0002 forbids binding a public interface.
 
-Run the reference `docker-compose.yml` with a secret in the environment:
+Run the reference `docker-compose.yml` with a pinned image tag and a secret in the environment:
 
 ```bash
+GATEWAY_IMAGE=ghcr.io/trajectonomics/mcp-auth-gateway:sha-1a2b3c4 \
 GATEWAY_INTERNAL_SECRET=$(openssl rand -hex 32) docker compose up -d
 curl --fail http://127.0.0.1:8080/health
 # {"status":"ok"}
 ```
 
-The reference Compose file uses host networking, a read-only root filesystem, `cap_drop: [ALL]`,
-`no-new-privileges`, and a Bun-based healthcheck that probes `/health` (the Alpine image has no
-curl).
+The reference Compose file refuses to start without `GATEWAY_IMAGE`, and uses host networking, a
+read-only root filesystem, `cap_drop: [ALL]`, `no-new-privileges`, and a Bun-based healthcheck that
+probes `/health` (the Alpine image has no curl).
 
-Bootstrap the Token File once with the interactive login, then copy or mount it into `/data`:
+The Token File lives in the named volume `mcp-auth-gateway_gateway-data`. Docker seeds a fresh named
+volume from the image's `/data`, which the Dockerfile already `chown`s to `bun` (UID 1000), so the
+Token Manager can write without a manual `chown`. Bootstrap the Token File once with the interactive
+login, then install it as the container user:
 
 ```bash
-bun run login:mobbin --out ./data/tokens.json
-# or, for an already running container:
-docker cp ./tokens.json mcp-auth-gateway:/data/tokens.json
+bun run login:mobbin --out ./tokens.json
+docker compose exec -T gateway sh -c 'umask 077; cat > /data/tokens.json' < ./tokens.json
 ```
 
 `GET /health` is unauthenticated and returns `{"status":"ok"}`; use it for liveness probes.
@@ -105,10 +109,11 @@ On success the command writes the Token File as `0600` in a `0700` directory wit
 `token_endpoint`, `client_id`, `resource`, `access_token`, `refresh_token`, and `expires_at`. It
 contains secrets: never commit it.
 
-Mount or copy the Token File into the gateway's `/data` volume, for example:
+Install it into the gateway's named `/data` volume as the unprivileged container user, which keeps
+the file owned by `bun` with `0600` permissions:
 
 ```bash
-docker cp ./tokens.json <gateway-container>:/data/tokens.json
+docker compose exec -T gateway sh -c 'umask 077; cat > /data/tokens.json' < ./tokens.json
 ```
 
 Rerun the Bootstrap Login only when the Runbook says the refresh token was permanently revoked.

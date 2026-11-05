@@ -1,3 +1,4 @@
+import { isRecord } from "./is-record"
 import type { TokenFile } from "./token-file"
 import { TokenRefreshError } from "./token-refresh-error"
 import { parseTokenRefreshResponse } from "./token-refresh-response"
@@ -32,7 +33,9 @@ async function sendRequest(fetchImpl: typeof fetch, tokenFile: TokenFile): Promi
 			}).toString(),
 		})
 	} catch (error) {
-		throw new TokenRefreshError("refresh_failed", "Token refresh request failed", { cause: error })
+		throw new TokenRefreshError("refresh_request_failed", "Token refresh request failed", {
+			cause: error,
+		})
 	}
 }
 
@@ -67,7 +70,7 @@ function requestError(status: number, payload: unknown): TokenRefreshError {
 }
 
 function readOAuthError(payload: unknown): string | undefined {
-	if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return undefined
-	const oauthError = (payload as Record<string, unknown>)["error"]
+	if (!isRecord(payload)) return undefined
+	const oauthError = payload["error"]
 	return typeof oauthError === "string" ? oauthError : undefined
 }

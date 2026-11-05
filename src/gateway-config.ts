@@ -1,3 +1,5 @@
+import { DEFAULT_TOKEN_FILE, DEFAULT_UPSTREAM_URL } from "./defaults"
+
 /** Runtime configuration for the HTTP Gateway. */
 export interface GatewayConfig {
 	readonly gatewaySecret: string
@@ -12,6 +14,7 @@ export type GatewayConfigErrorCode =
 	| "gateway_secret_missing"
 	| "gateway_secret_too_short"
 	| "port_invalid"
+	| "host_invalid"
 
 /** Error thrown when runtime configuration cannot produce a Gateway Config. */
 export class GatewayConfigError extends Error {
@@ -25,10 +28,9 @@ export class GatewayConfigError extends Error {
 }
 
 const MIN_SECRET_BYTES = 32
-const DEFAULT_UPSTREAM_URL = "https://api.mobbin.com/mcp"
-const DEFAULT_TOKEN_FILE = "/data/tokens.json"
 const DEFAULT_PORT = 8080
 const DEFAULT_HOST = "127.0.0.1"
+const WILDCARD_HOSTS = new Set(["0.0.0.0", "::", "[::]"])
 
 /** Loads a frozen Gateway Config from the environment, refusing insecure startup. */
 export function loadGatewayConfig(env: Record<string, string | undefined>): GatewayConfig {
@@ -47,12 +49,23 @@ export function loadGatewayConfig(env: Record<string, string | undefined>): Gate
 		upstreamUrl: valueOrDefault(env["UPSTREAM_URL"], DEFAULT_UPSTREAM_URL),
 		tokenFile: valueOrDefault(env["TOKEN_FILE"], DEFAULT_TOKEN_FILE),
 		port: parsePort(env["PORT"]),
-		host: valueOrDefault(env["HOST"], DEFAULT_HOST),
+		host: parseHost(env["HOST"]),
 	})
 }
 
 function valueOrDefault(value: string | undefined, fallback: string): string {
 	return value === undefined || value.length === 0 ? fallback : value
+}
+
+function parseHost(value: string | undefined): string {
+	const host = valueOrDefault(value, DEFAULT_HOST)
+	if (WILDCARD_HOSTS.has(host)) {
+		throw new GatewayConfigError(
+			"host_invalid",
+			`HOST must never be a wildcard address; bind ${DEFAULT_HOST} or a private interface`,
+		)
+	}
+	return host
 }
 
 function parsePort(value: string | undefined): number {

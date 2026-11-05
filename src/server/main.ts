@@ -12,6 +12,7 @@ const handler = createGatewayHandler({
 	gatewaySecret: config.gatewaySecret,
 	tokenManager,
 	upstreamUrl: config.upstreamUrl,
+	nowMs: Date.now,
 })
 
 Bun.serve({

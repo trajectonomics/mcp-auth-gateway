@@ -1,3 +1,4 @@
+import { isRecord } from "../is-record"
 import { BootstrapLoginError } from "./errors"
 
 /** Inputs for exchanging an authorization code for tokens. */
@@ -15,7 +16,7 @@ export interface ExchangeCodeOptions {
 export interface TokenSet {
 	readonly accessToken: string
 	readonly refreshToken: string
-	readonly expiresIn: number
+	readonly expiresInSeconds: number
 }
 
 /** Exchanges an authorization code for the initial token set. */
@@ -54,24 +55,29 @@ export async function exchangeCode(options: ExchangeCodeOptions): Promise<TokenS
 		)
 	}
 	const payload = (await response.json().catch(() => undefined)) as unknown
-	const accessToken = isRecord(payload) ? payload["access_token"] : undefined
-	const refreshToken = isRecord(payload) ? payload["refresh_token"] : undefined
-	const expiresIn = isRecord(payload) ? payload["expires_in"] : undefined
+	if (!isRecord(payload)) throw incompleteTokenResponse(options.tokenEndpoint)
+	const accessToken = payload["access_token"]
+	const refreshToken = payload["refresh_token"]
+	const expiresInSeconds = payload["expires_in"]
 	if (
 		typeof accessToken !== "string" ||
 		accessToken.length === 0 ||
 		typeof refreshToken !== "string" ||
 		refreshToken.length === 0 ||
-		typeof expiresIn !== "number" ||
-		!Number.isFinite(expiresIn) ||
-		expiresIn < 0
+		typeof expiresInSeconds !== "number" ||
+		!Number.isFinite(expiresInSeconds) ||
+		expiresInSeconds < 0
 	) {
-		throw new BootstrapLoginError(
-			"invalid_token_response",
-			`Token exchange at "${options.tokenEndpoint}" returned an incomplete token response`,
-		)
+		throw incompleteTokenResponse(options.tokenEndpoint)
 	}
-	return Object.freeze({ accessToken, refreshToken, expiresIn })
+	return Object.freeze({ accessToken, refreshToken, expiresInSeconds })
+}
+
+function incompleteTokenResponse(tokenEndpoint: string): BootstrapLoginError {
+	return new BootstrapLoginError(
+		"invalid_token_response",
+		`Token exchange at "${tokenEndpoint}" returned an incomplete token response`,
+	)
 }
 
 async function readOAuthError(response: Response): Promise<string | undefined> {
@@ -79,8 +85,4 @@ async function readOAuthError(response: Response): Promise<string | undefined> {
 	if (!isRecord(payload)) return undefined
 	const error = payload["error"]
 	return typeof error === "string" && error.length > 0 ? error : undefined
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value)
 }

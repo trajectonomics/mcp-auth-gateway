@@ -1,6 +1,7 @@
 import type { GatewayHandlerDeps } from "./gateway-handler-types"
-import { proxyRequest } from "./gateway-proxy"
+import { type GatewayProxyContext, proxyRequest } from "./gateway-proxy"
 import { validateGatewaySecret } from "./gateway-secret"
+import type { TokenManager } from "./token-manager"
 import type { TokenState } from "./token-state"
 
 const HEALTH_PATHS = new Set(["/health", "/healthz"])
@@ -32,8 +33,11 @@ function routeFor(request: Request): GatewayRoute {
 export function createGatewayHandler(
 	deps: GatewayHandlerDeps,
 ): (request: Request) => Promise<Response> {
-	const fetchImpl = deps.fetchImpl ?? fetch
-	const nowMs = deps.nowMs ?? Date.now
+	const context: GatewayProxyContext = {
+		deps,
+		fetchImpl: deps.fetchImpl ?? fetch,
+		nowMs: deps.nowMs ?? Date.now,
+	}
 	return async function handle(request: Request): Promise<Response> {
 		const route = routeFor(request)
 		if (route === "health") return jsonResponse({ status: "ok" })
@@ -42,15 +46,18 @@ export function createGatewayHandler(
 			return unauthorized()
 		}
 		if (route === "token_health") {
-			return jsonResponse({ tokenState: await readTokenState(deps, nowMs) })
+			return jsonResponse({ tokenState: await readTokenState(deps.tokenManager, context.nowMs) })
 		}
-		return proxyRequest(deps, fetchImpl, nowMs, request)
+		return proxyRequest(context, request)
 	}
 }
 
-async function readTokenState(deps: GatewayHandlerDeps, nowMs: () => number): Promise<TokenState> {
+async function readTokenState(
+	tokenManager: TokenManager,
+	nowMs: () => number,
+): Promise<TokenState> {
 	try {
-		return await deps.tokenManager.getTokenState(nowMs())
+		return await tokenManager.getTokenState(nowMs())
 	} catch {
 		return "invalid"
 	}

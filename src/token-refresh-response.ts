@@ -1,3 +1,4 @@
+import { isRecord } from "./is-record"
 import { parseTokenFile, type TokenFile, TokenFileParseError } from "./token-file"
 import { TokenRefreshError } from "./token-refresh-error"
 
@@ -32,10 +33,10 @@ export function parseTokenRefreshResponse(
 }
 
 function readRecord(payload: unknown, status: number): Record<string, unknown> {
-	if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+	if (!isRecord(payload)) {
 		throw invalidResponse("Token endpoint response is not a JSON object", status)
 	}
-	return payload as Record<string, unknown>
+	return payload
 }
 
 function readAccessToken(record: Record<string, unknown>, status: number): string {
@@ -60,12 +61,16 @@ function readRefreshToken(
 }
 
 function readExpiresAt(record: Record<string, unknown>, nowMs: number, status: number): number {
-	const expiresIn = record["expires_in"]
-	if (expiresIn !== undefined) {
-		if (typeof expiresIn !== "number" || !Number.isFinite(expiresIn) || expiresIn < 0) {
+	const expiresInSeconds = record["expires_in"]
+	if (expiresInSeconds !== undefined) {
+		if (
+			typeof expiresInSeconds !== "number" ||
+			!Number.isFinite(expiresInSeconds) ||
+			expiresInSeconds < 0
+		) {
 			throw invalidResponse('Token endpoint response has an invalid "expires_in"', status)
 		}
-		return nowMs + Math.round(expiresIn * 1_000)
+		return nowMs + Math.round(expiresInSeconds * 1_000)
 	}
 	const expiresAt = record["expires_at"]
 	if (isUnixSeconds(expiresAt)) return expiresAt * 1_000

@@ -1,3 +1,4 @@
+import { DEFAULT_ISSUER, DEFAULT_RESOURCE } from "../defaults"
 import { parseTokenFile, type TokenFile } from "../token-file"
 import { createFileTokenStore } from "../token-store"
 import { createAuthorizeUrl } from "./authorize-url"
@@ -20,8 +21,6 @@ export interface BootstrapLoginDeps {
 }
 
 const DEFAULT_PORT = 9696
-const DEFAULT_ISSUER = "https://ujasntkfphywizsdaapi.supabase.co/auth/v1"
-const DEFAULT_RESOURCE = "https://api.mobbin.com/mcp"
 const RANDOM_BYTES_LENGTH = 32
 
 /**
@@ -69,7 +68,7 @@ export async function runBootstrapLogin(deps: BootstrapLoginDeps): Promise<Token
 		resource,
 		access_token: tokens.accessToken,
 		refresh_token: tokens.refreshToken,
-		expires_at: deps.nowMs() + tokens.expiresIn * 1000,
+		expires_at: deps.nowMs() + tokens.expiresInSeconds * 1000,
 	})
 	await createFileTokenStore({ path: deps.outPath }).write(tokenFile)
 	return tokenFile

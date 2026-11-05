@@ -44,7 +44,7 @@ describe("Token exchange", () => {
 		expect(tokens).toEqual({
 			accessToken: "access-token",
 			refreshToken: "refresh-token",
-			expiresIn: 3600,
+			expiresInSeconds: 3600,
 		})
 		expect(captured?.url).toBe(OPTIONS.tokenEndpoint)
 		expect(captured?.init?.method).toBe("POST")

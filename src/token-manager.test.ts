@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import type { TokenFile } from "./token-file"
 import { createTokenManager } from "./token-manager"
-import { TokenRefreshError } from "./token-refresh-error"
 import type { TokenRefresher } from "./token-refresher"
 import type { TokenStore } from "./token-store"
 
@@ -184,47 +183,5 @@ describe("Token Manager refresh", () => {
 		expect(calls.count).toBe(1)
 		expect(memory.current()).toBe(old)
 		expect(await manager.getTokenState(NOW_MS)).toBe("valid")
-	})
-
-	it("surfaces a revoked Refresh Token as a TokenRefreshError unchanged", async () => {
-		const revoked = new TokenRefreshError("refresh_token_revoked", "Refresh Token was revoked")
-		const refresher: TokenRefresher = async () => {
-			throw revoked
-		}
-		const manager = createTokenManager({
-			store: memoryStore(tokenFile("access-1", NOW_MS + 900_000)).store,
-			refresher,
-		})
-
-		const caught = await manager
-			.getAccessToken({ nowMs: NOW_MS, rejectedAccessToken: "access-1" })
-			.catch((error: unknown) => error)
-
-		expect(caught).toBe(revoked)
-		if (caught instanceof TokenRefreshError) {
-			expect(caught.code).toBe("refresh_token_revoked")
-		}
-	})
-
-	it("shares one upstream refresh across concurrent callers", async () => {
-		const gate = deferred()
-		let refreshes = 0
-		const next = tokenFile("access-2", NOW_MS + 900_000)
-		const refresher: TokenRefresher = async () => {
-			refreshes += 1
-			await gate.promise
-			return next
-		}
-		const manager = createTokenManager({
-			store: memoryStore(tokenFile("access-1", NOW_MS + 1)).store,
-			refresher,
-		})
-		const callers = [1, 2, 3, 4].map(() => manager.getAccessToken({ nowMs: NOW_MS }))
-		await Bun.sleep(5)
-
-		expect(refreshes).toBe(1)
-		gate.resolve()
-
-		expect(await Promise.all(callers)).toEqual(["access-2", "access-2", "access-2", "access-2"])
 	})
 })

@@ -1,7 +1,7 @@
 import { randomBytes as nodeRandomBytes } from "node:crypto"
+import { DEFAULT_TOKEN_FILE } from "../defaults"
 import { runBootstrapLogin } from "./bootstrap-login"
 
-const DEFAULT_OUT_PATH = "/data/tokens.json"
 const OPENER_TIMEOUT_MS = 2000
 
 function parseOutPath(args: readonly string[]): string | undefined {
@@ -33,7 +33,7 @@ async function openBrowser(url: string): Promise<void> {
 
 async function main(): Promise<void> {
 	const outPath =
-		parseOutPath(process.argv.slice(2)) ?? process.env["MOBBIN_TOKEN_FILE"] ?? DEFAULT_OUT_PATH
+		parseOutPath(process.argv.slice(2)) ?? process.env["MOBBIN_TOKEN_FILE"] ?? DEFAULT_TOKEN_FILE
 	const issuer = process.env["MOBBIN_ISSUER"]
 	const resource = process.env["MOBBIN_RESOURCE"]
 	await runBootstrapLogin({

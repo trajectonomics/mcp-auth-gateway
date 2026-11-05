@@ -1,3 +1,5 @@
+import { isRecord } from "./is-record"
+
 /** Persistent OAuth credential document stored on the Token File volume. */
 export interface TokenFile {
 	readonly issuer: string
@@ -41,23 +43,22 @@ const REQUIRED_FIELDS = [...STRING_FIELDS, "expires_at"] as const
 
 /** Validates an already-JSON-parsed value and returns a frozen Token File. */
 export function parseTokenFile(value: unknown): TokenFile {
-	if (typeof value !== "object" || value === null || Array.isArray(value)) {
+	if (!isRecord(value)) {
 		throw new TokenFileParseError("not_an_object", "", "Token File must be a JSON object")
 	}
-	const record = value as Record<string, unknown>
 	for (const field of REQUIRED_FIELDS) {
-		if (!Object.hasOwn(record, field)) {
+		if (!Object.hasOwn(value, field)) {
 			throw new TokenFileParseError("missing_field", field, `Token File is missing "${field}"`)
 		}
 	}
 	return Object.freeze({
-		issuer: readStringField(record, "issuer"),
-		token_endpoint: readStringField(record, "token_endpoint"),
-		client_id: readStringField(record, "client_id"),
-		resource: readStringField(record, "resource"),
-		access_token: readStringField(record, "access_token"),
-		refresh_token: readStringField(record, "refresh_token"),
-		expires_at: readExpiresAt(record),
+		issuer: readStringField(value, "issuer"),
+		token_endpoint: readStringField(value, "token_endpoint"),
+		client_id: readStringField(value, "client_id"),
+		resource: readStringField(value, "resource"),
+		access_token: readStringField(value, "access_token"),
+		refresh_token: readStringField(value, "refresh_token"),
+		expires_at: readExpiresAt(value),
 	})
 }
 

@@ -2,6 +2,7 @@
 export type TokenRefreshErrorCode =
 	| "refresh_token_revoked"
 	| "refresh_failed"
+	| "refresh_request_failed"
 	| "refresh_response_invalid"
 
 /** Metadata reported alongside a failed token refresh. */

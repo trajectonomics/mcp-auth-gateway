@@ -1,6 +1,6 @@
 import type { TokenFile } from "./token-file"
 
-/** Lifecycle status of a Token File: active, nearing expiry, or unusable. */
+/** Lifecycle status of a Token File: `valid`, `expiring_soon`, or `invalid`. */
 export type TokenState = "valid" | "expiring_soon" | "invalid"
 
 /** Proactive refresh lead before expiry: five minutes, in milliseconds. */

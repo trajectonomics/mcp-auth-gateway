@@ -7,7 +7,6 @@ const COMPLETION_PAGE = `<!doctype html>
 
 /** Loopback listener that captures the OAuth authorization code. */
 export interface CallbackServer {
-	readonly redirectUri: string
 	waitForCode(): Promise<string>
 	stop(): Promise<void>
 }
@@ -89,9 +88,8 @@ export function startCallbackServer(options: {
 		)
 	}
 
-	return {
-		redirectUri: `http://127.0.0.1:${server.port}/callback`,
+	return Object.freeze({
 		waitForCode: () => codePromise,
 		stop,
-	}
+	})
 }

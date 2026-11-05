@@ -145,11 +145,11 @@ describe("Token Refresher", () => {
 		expect(error.oauthError).toBe("server_error")
 	})
 
-	it("reports a network failure as refresh_failed with its cause", async () => {
+	it("reports a network failure as refresh_request_failed with its cause", async () => {
 		const cause = new Error("socket closed")
 		const error = await refreshError(createTokenRefresher({ fetchImpl: failingFetch(cause) }))
 
-		expect(error.code).toBe("refresh_failed")
+		expect(error.code).toBe("refresh_request_failed")
 		expect(error.cause).toBe(cause)
 	})
 

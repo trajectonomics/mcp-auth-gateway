@@ -1,4 +1,5 @@
 import type { TokenFile } from "./token-file"
+import { TokenRefreshError } from "./token-refresh-error"
 import type { TokenRefresher } from "./token-refresher"
 import { evaluateTokenState, type TokenState } from "./token-state"
 import type { TokenStore } from "./token-store"
@@ -20,53 +21,48 @@ export function createTokenManager(deps: TokenManagerDeps): TokenManager {
 	const { store, refresher } = deps
 	let cached: TokenFile | undefined
 	let inFlight: Promise<TokenFile> | undefined
+	let revokedRefreshToken: string | undefined
 
 	async function load(): Promise<TokenFile> {
 		if (cached !== undefined) return cached
-		const loaded = await store.read()
-		if (cached === undefined) cached = loaded
+		cached ??= await store.read()
 		return cached
 	}
 
-	async function readDisk(): Promise<TokenFile | undefined> {
-		try {
-			return await store.read()
-		} catch {
-			return undefined
+	function adoptable(disk: TokenFile, nowMs: number, rejected: string | undefined): boolean {
+		if (evaluateTokenState(disk, nowMs) === "invalid") return false
+		return disk.access_token !== (rejected ?? cached?.access_token)
+	}
+
+	function rememberRevocation(error: unknown, base: TokenFile): void {
+		if (error instanceof TokenRefreshError && error.code === "refresh_token_revoked") {
+			revokedRefreshToken = base.refresh_token
 		}
 	}
 
-	function adoptable(
-		disk: TokenFile,
-		nowMs: number,
-		rejectedAccessToken: string | undefined,
-	): boolean {
-		if (evaluateTokenState(disk, nowMs) === "invalid") return false
-		const previous = rejectedAccessToken ?? cached?.access_token
-		return disk.access_token !== previous
-	}
-
-	async function runRefresh(
-		nowMs: number,
-		rejectedAccessToken: string | undefined,
-	): Promise<TokenFile> {
-		const disk = await readDisk()
+	async function refresh(nowMs: number, rejected: string | undefined): Promise<TokenFile> {
+		const disk = await store.read().catch(() => undefined)
 		const base = disk ?? (await load())
-		if (adoptable(base, nowMs, rejectedAccessToken)) {
+		if (adoptable(base, nowMs, rejected)) {
 			cached = base
+			if (base.refresh_token !== revokedRefreshToken) revokedRefreshToken = undefined
 			return base
 		}
-		const refreshed = await refresher({ tokenFile: base, nowMs })
-		await store.write(refreshed)
-		cached = refreshed
-		return refreshed
+		try {
+			const refreshed = await refresher({ tokenFile: base, nowMs })
+			await store.write(refreshed)
+			cached = refreshed
+			revokedRefreshToken = undefined
+			return refreshed
+		} catch (error) {
+			rememberRevocation(error, base)
+			throw error
+		}
 	}
 
-	function startRefresh(
-		nowMs: number,
-		rejectedAccessToken: string | undefined,
-	): Promise<TokenFile> {
-		const flight = runRefresh(nowMs, rejectedAccessToken)
+	function nextRefresh(nowMs: number, rejected: string | undefined): Promise<TokenFile> {
+		if (inFlight !== undefined) return inFlight
+		const flight = refresh(nowMs, rejected)
 		inFlight = flight
 		const clear = (): void => {
 			if (inFlight === flight) inFlight = undefined
@@ -84,12 +80,16 @@ export function createTokenManager(deps: TokenManagerDeps): TokenManager {
 		if (rejected === undefined && evaluateTokenState(current, input.nowMs) === "valid") {
 			return current.access_token
 		}
-		const pending = inFlight ?? startRefresh(input.nowMs, rejected)
-		return (await pending).access_token
+		const first = (await nextRefresh(input.nowMs, rejected)).access_token
+		if (rejected === undefined || first !== rejected) return first
+		return (await nextRefresh(input.nowMs, rejected)).access_token
 	}
 
 	async function getTokenState(nowMs: number): Promise<TokenState> {
-		return evaluateTokenState(await load(), nowMs)
+		const disk = await store.read()
+		cached = disk
+		if (disk.refresh_token !== revokedRefreshToken) revokedRefreshToken = undefined
+		return revokedRefreshToken === undefined ? evaluateTokenState(disk, nowMs) : "invalid"
 	}
 
 	return Object.freeze({ getAccessToken, getTokenState })
