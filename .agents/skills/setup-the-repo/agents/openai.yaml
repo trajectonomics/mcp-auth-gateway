@@ -1,5 +1,0 @@
-interface:
-  display_name: "Setup The Repo"
-  short_description: "Interactive setup and customization for newly created repositories"
-policy:
-  allow_implicit_invocation: false

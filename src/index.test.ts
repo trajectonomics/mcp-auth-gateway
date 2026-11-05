@@ -1,15 +1,22 @@
 import { describe, expect, it } from "bun:test"
-import { getTemplateInfo } from "./index"
+import { getHealthStatus, type HealthStatus, handleRequest } from "./index"
 
-describe("getTemplateInfo", () => {
-	it("returns valid template metadata", () => {
-		const info = getTemplateInfo()
-		expect(info.name).toBe("@trajectonomics/technical-template")
-		expect(info.initialized).toBe(true)
+describe("Service Handler", () => {
+	it("returns operational health status", () => {
+		const health = getHealthStatus("test-service", Date.now())
+		expect(health.status).toBe("ok")
+		expect(health.service).toBe("test-service")
 	})
 
-	it("returns a frozen object", () => {
-		const info = getTemplateInfo()
-		expect(Object.isFrozen(info)).toBe(true)
+	it("handles /health route with 200 JSON", async () => {
+		const res = handleRequest("/health", "test-service", Date.now())
+		expect(res.status).toBe(200)
+		const body = (await res.json()) as HealthStatus
+		expect(body.service).toBe("test-service")
+	})
+
+	it("returns 404 for unknown route", () => {
+		const res = handleRequest("/unknown", "test-service", Date.now())
+		expect(res.status).toBe(404)
 	})
 })
