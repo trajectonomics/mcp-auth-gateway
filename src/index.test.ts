@@ -1,10 +1,16 @@
 import { describe, expect, it } from "bun:test"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import {
+	atomicWriteFile,
+	createFileTokenStore,
 	evaluateTokenState,
 	getHealthStatus,
 	type HealthStatus,
 	handleRequest,
 	parseTokenFile,
+	TokenStoreError,
 } from "./index"
 
 describe("Service Handler", () => {
@@ -40,5 +46,28 @@ describe("Public surface", () => {
 			expires_at: expiresAt,
 		})
 		expect(evaluateTokenState(tokenFile, expiresAt - 300_000)).toBe("expiring_soon")
+	})
+
+	it("exposes atomic Token File storage through the package entry point", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "token-store-entry-"))
+		try {
+			const path = join(directory, "tokens.json")
+			const tokenFile = parseTokenFile({
+				issuer: "https://auth.example.com",
+				token_endpoint: "https://auth.example.com/token",
+				client_id: "client-abc",
+				resource: "https://api.example.com/mcp",
+				access_token: "access-token",
+				refresh_token: "refresh-token",
+				expires_at: 1_700_000_000_000,
+			})
+			await atomicWriteFile(path, JSON.stringify(tokenFile))
+
+			expect(await createFileTokenStore({ path }).read()).toEqual(tokenFile)
+			await rm(path)
+			await expect(createFileTokenStore({ path }).read()).rejects.toBeInstanceOf(TokenStoreError)
+		} finally {
+			await rm(directory, { recursive: true, force: true })
+		}
 	})
 })
