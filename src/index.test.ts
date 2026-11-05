@@ -4,6 +4,8 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
 	atomicWriteFile,
+	BootstrapLoginError,
+	createCodeVerifier,
 	createFileTokenStore,
 	createGatewayHandler,
 	createTokenManager,
@@ -14,6 +16,7 @@ import {
 	handleRequest,
 	loadGatewayConfig,
 	parseTokenFile,
+	runBootstrapLogin,
 	TokenRefreshError,
 	TokenStoreError,
 	validateGatewaySecret,
@@ -52,6 +55,12 @@ describe("Public surface", () => {
 			expires_at: expiresAt,
 		})
 		expect(evaluateTokenState(tokenFile, expiresAt - 300_000)).toBe("expiring_soon")
+	})
+
+	it("exposes PKCE and Bootstrap Login through the package entry point", () => {
+		expect(createCodeVerifier(new Uint8Array(32))).toHaveLength(43)
+		expect(typeof runBootstrapLogin).toBe("function")
+		expect(BootstrapLoginError.prototype).toBeInstanceOf(Error)
 	})
 
 	it("exposes the Token Refresher and Token Manager through the package entry point", async () => {
