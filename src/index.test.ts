@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test"
-import { getHealthStatus, type HealthStatus, handleRequest } from "./index"
+import {
+	evaluateTokenState,
+	getHealthStatus,
+	type HealthStatus,
+	handleRequest,
+	parseTokenFile,
+} from "./index"
 
 describe("Service Handler", () => {
 	it("returns operational health status", () => {
@@ -18,5 +24,21 @@ describe("Service Handler", () => {
 	it("returns 404 for unknown route", () => {
 		const res = handleRequest("/unknown", "test-service", Date.now())
 		expect(res.status).toBe(404)
+	})
+})
+
+describe("Public surface", () => {
+	it("exposes Token File parsing and state evaluation through the package entry point", () => {
+		const expiresAt = 1_700_000_000_000
+		const tokenFile = parseTokenFile({
+			issuer: "https://auth.example.com",
+			token_endpoint: "https://auth.example.com/token",
+			client_id: "client-abc",
+			resource: "https://api.example.com/mcp",
+			access_token: "access-token",
+			refresh_token: "refresh-token",
+			expires_at: expiresAt,
+		})
+		expect(evaluateTokenState(tokenFile, expiresAt - 300_000)).toBe("expiring_soon")
 	})
 })
