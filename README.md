@@ -27,6 +27,43 @@ console.log(response.status)
 
 ---
 
+## Bootstrap Login
+
+`bun run login:mobbin` performs the one-time interactive OAuth 2.0 PKCE login and writes the Token
+File consumed by the gateway.
+
+```bash
+# Defaults to /data/tokens.json
+bun run login:mobbin
+
+# Or choose a different Token File path
+MOBBIN_TOKEN_FILE=./tokens.json bun run login:mobbin
+bun run login:mobbin --out ./tokens.json
+```
+
+The CLI prints the authorization URL and tries to open a browser. Complete the consent screen; the
+loopback listener runs only on `http://127.0.0.1:9696/callback` and stops as soon as the
+authorization code arrives. The flow times out after five minutes.
+
+Optional overrides:
+
+- `MOBBIN_ISSUER` (default `https://ujasntkfphywizsdaapi.supabase.co/auth/v1`)
+- `MOBBIN_RESOURCE` (default `https://api.mobbin.com/mcp`)
+
+On success the command writes the Token File as `0600` in a `0700` directory with `issuer`,
+`token_endpoint`, `client_id`, `resource`, `access_token`, `refresh_token`, and `expires_at`. It
+contains secrets: never commit it.
+
+Mount or copy the Token File into the gateway's `/data` volume, for example:
+
+```bash
+docker cp ./tokens.json <gateway-container>:/data/tokens.json
+```
+
+Rerun the Bootstrap Login only when the Runbook says the refresh token was permanently revoked.
+
+---
+
 ## Development
 
 ```bash
