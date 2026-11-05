@@ -1,0 +1,38 @@
+# Reference deployment contract for local verification. Production host Compose,
+# Tailscale and Cloudflare wiring live in trajectonomics/infra#3.
+#
+# Usage:
+#   GATEWAY_INTERNAL_SECRET=$(openssl rand -hex 32) docker compose up -d
+#
+# No secret has a default here: the file refuses to start without one.
+name: mcp-auth-gateway
+services:
+  gateway:
+    image: ghcr.io/trajectonomics/mcp-auth-gateway:latest
+    container_name: mcp-auth-gateway
+    restart: unless-stopped
+    network_mode: host
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      GATEWAY_INTERNAL_SECRET: ${GATEWAY_INTERNAL_SECRET:?set GATEWAY_INTERNAL_SECRET to at least 32 bytes}
+      HOST: 127.0.0.1
+      PORT: ${PORT:-8080}
+      TOKEN_FILE: /data/tokens.json
+    volumes:
+      # Directory mount, not single-file: the Token File is replaced by atomic rename.
+      - ./data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://127.0.0.1:' + (process.env.PORT || '8080') + '/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
