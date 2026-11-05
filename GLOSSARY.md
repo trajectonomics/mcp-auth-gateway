@@ -1,23 +1,20 @@
-# Domain Glossary
+# Domain Glossary: @trajectonomics/mcp-auth-gateway
 
-Ubiquitous language for this repository. Every concept named here has an exact definition that code, tests, commit messages, and PR titles must use. Synonyms in a diff are defects.
-
-## Template Guide
-
-When instantiating a new repository from this template:
-1. Define your core domain entities, value objects, and states below.
-2. In single-context repositories, maintain this single `GLOSSARY.md` at repo root.
-3. In multi-context repositories, place `GLOSSARY-MAP.md` at root pointing to each sub-context's `GLOSSARY.md`.
-
----
+Ubiquitous language for `trajectonomics/mcp-auth-gateway`. Every term defined here is binding across code, tests, documentation, and PR titles. Synonyms in a diff are defects.
 
 ## Core Terms
 
+### Auth Relay Proxy
+Reverse proxy that mediates communication between headless AI agents and upstream MCP servers by validating inbound gateway secrets and injecting valid OAuth bearer tokens into unbuffered Streamable HTTP/SSE streams.
+
+### Token Manager
+Component responsible for persistent token lifecycle management, including atomic disk persistence, proactive refresh (<5 minutes before expiry), and reactive retry on upstream 401 Unauthorized.
+
+### Bootstrap Login
+One-time interactive CLI workflow (login:mobbin) that initiates an OAuth 2.0 PKCE flow on a local loopback port to acquire initial access and refresh tokens.
+
+### Streamable HTTP
+MCP transport protocol operating over HTTP supporting streaming JSON-RPC and server-sent events (SSE) without response buffering.
+
 ### Invariant
-A rule or condition that must hold true at all times across all state transitions within this system.
-
-### Pure Core
-The isolated domain logic of a package that executes deterministically without I/O, network calls, filesystem access, system clock dependencies, or global mutable state.
-
-### Error Code
-A strictly typed, distinct machine-readable identifier assigned to every rejection rule across the package API.
+A rule or condition that must hold true across all state transitions in this system.
