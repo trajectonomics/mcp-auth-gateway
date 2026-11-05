@@ -3,6 +3,11 @@
  */
 
 export { atomicWriteFile } from "./atomic-write"
+export type { GatewayConfig, GatewayConfigErrorCode } from "./gateway-config"
+export { GatewayConfigError, loadGatewayConfig } from "./gateway-config"
+export { createGatewayHandler } from "./gateway-handler"
+export type { GatewayFetch, GatewayHandlerDeps } from "./gateway-handler-types"
+export { validateGatewaySecret } from "./gateway-secret"
 export type { HealthStatus } from "./health"
 export { getHealthStatus, handleRequest } from "./health"
 export type { BootstrapLoginDeps } from "./login/bootstrap-login"

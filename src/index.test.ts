@@ -7,16 +7,19 @@ import {
 	BootstrapLoginError,
 	createCodeVerifier,
 	createFileTokenStore,
+	createGatewayHandler,
 	createTokenManager,
 	createTokenRefresher,
 	evaluateTokenState,
 	getHealthStatus,
 	type HealthStatus,
 	handleRequest,
+	loadGatewayConfig,
 	parseTokenFile,
 	runBootstrapLogin,
 	TokenRefreshError,
 	TokenStoreError,
+	validateGatewaySecret,
 } from "./index"
 
 describe("Service Handler", () => {
@@ -83,6 +86,15 @@ describe("Public surface", () => {
 		expect(typeof createTokenRefresher).toBe("function")
 		expect(await manager.getAccessToken({ nowMs: 1_699_999_999_000 })).toBe("access-token")
 		expect(new TokenRefreshError("refresh_failed", "failed").code).toBe("refresh_failed")
+	})
+
+	it("exposes the HTTP Gateway through the package entry point", () => {
+		const config = loadGatewayConfig({
+			GATEWAY_INTERNAL_SECRET: "0123456789abcdef0123456789abcdef",
+		})
+
+		expect(typeof createGatewayHandler).toBe("function")
+		expect(validateGatewaySecret(`Bearer ${config.gatewaySecret}`, config.gatewaySecret)).toBe(true)
 	})
 
 	it("exposes atomic Token File storage through the package entry point", async () => {

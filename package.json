@@ -34,6 +34,7 @@
 	],
 	"scripts": {
 		"build": "tsdown",
+		"start": "bun run src/server/main.ts",
 		"test": "bun test",
 		"typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
 		"lint": "biome ci --error-on-warnings .",
