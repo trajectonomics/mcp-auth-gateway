@@ -38,6 +38,19 @@ Create a GitHub issue.
 
 Read it as in **Read an issue** above.
 
+## Specs and tickets
+
+A spec is an issue. Its tickets are sub-issues with native dependency edges. `/implement-spec` starts
+from that graph, so create it before implementation when the spec has none.
+
+1. Split the spec's Implementation Decisions and Testing Decisions into independently mergeable
+   slices.
+2. Create each ticket as a sub-issue of the spec (`gh issue create --parent <spec> ...`).
+3. Add blockers with `--blocked-by`; the frontier is the tickets with zero open blockers.
+4. Verify both edges. Use the REST fallbacks in `docs/agents/github-operations.md` when GraphQL fails.
+
+Do not treat a ticket-less spec as one ticket.
+
 ## Wayfinding operations
 
 Used by `/wayfinder`. The **map** is a single issue with **child** issues as tickets.

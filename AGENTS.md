@@ -8,7 +8,7 @@ Instructions for AI coding agents in `trajectonomics/mcp-auth-gateway` (`@trajec
 2. Never commit secrets or `.env` files. `NPM_TOKEN` lives in repo secrets only.
 3. Package design: Keep core packages pure and deterministic wherever applicable (data in, data out, no I/O, no clock, no unseeded randomness). Keep boundaries closed-world with explicit contracts.
 4. Bun only: `bun install`, `bun test`, `bun run <script>`. Do not add npm/pnpm/yarn lockfiles.
-5. Done means `bun run check` passes (Biome lint with zero warnings, strict typecheck, tests, build, publint + are-the-types-wrong). `bun run format` fixes formatting and import order. Do not loosen `tsconfig.base.json` or `biome.json` to make an error go away.
+5. Done means `bun run check` passes (Biome lint with zero warnings, strict typecheck, tests, build, publint + are-the-types-wrong). `bun run format` fixes formatting and import order. Container or workflow changes must also pass the `container` and `workflows` CI jobs. Do not loosen `tsconfig.base.json` or `biome.json` to make an error go away.
 6. Never edit `version` in `package.json` and never run `npm publish` locally. Merges to `main` publish alphas; a stable release is the manual Release workflow. PR titles are conventional commits (`feat:`, `fix:`, `feat!:` ...) because they decide the next version (see README "Releasing").
 
 ## Agent skills
@@ -24,7 +24,15 @@ Instructions for AI coding agents in `trajectonomics/mcp-auth-gateway` (`@trajec
 
 ### Issue tracker
 
-GitHub Issues via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+GitHub Issues via the `gh` CLI. A spec needs ticket sub-issues before implementation; if absent, create the graph first. See `docs/agents/issue-tracker.md`.
+
+### GitHub operations
+
+Workflow-file pushes need the `workflow` scope; retry transient `commit_refs_rules` failures. See `docs/agents/github-operations.md`.
+
+### Delegation
+
+Dispatching subagents: one worktree per ticket, and check for an existing worktree after a `fetch failed` before retrying. See `docs/agents/delegation.md`.
 
 ### Triage labels
 
@@ -33,6 +41,10 @@ Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `
 ### Domain docs
 
 Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Hosting
+
+Host deployment, Compose, Tailscale, and runbooks live in `trajectonomics/infra#3`. This repo publishes the image and container contract only. See `docs/adr/0002-ci-publish-and-manual-oci-deployment.md`.
 
 ### Installing and updating skills
 

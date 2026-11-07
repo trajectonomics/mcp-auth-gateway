@@ -33,4 +33,13 @@ Decisions behind the API live in `docs/adr/`; vocabulary lives in `GLOSSARY.md`.
 ## Files
 
 - One concern per file. The 100-line ceiling (200 for test files) is enforced by Biome. Split files as soon as multiple concerns arise.
-- `index.ts` remains a clean re-export list defining the package's public surface.
+- `index.ts` remains a clean re-export list defining the package's public surface. `src/index.surface.test.ts` pins the runtime exports; update it deliberately when the public API changes.
+
+## Where things live
+
+Reuse these modules instead of re-implementing them per feature.
+
+- Shared JSON record narrowing: `src/is-record.ts`.
+- Shared issuer, resource, Upstream, and Token File defaults: `src/defaults.ts`.
+- Pure token logic: `src/token-file.ts` and `src/token-state.ts`; adapters pass `nowMs` from their boundary.
+- Container contract: `Dockerfile` and `docker-compose.yml`; CI builds and smoke-tests them.
