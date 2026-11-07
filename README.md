@@ -36,6 +36,9 @@ pushes to `main` and on `v*` tags:
 ghcr.io/trajectonomics/mcp-auth-gateway:sha-1a2b3c4
 ```
 
+After the first publish, set the package visibility to **public** in the repository's package
+settings. The workflow's `GITHUB_TOKEN` can push images but cannot change package visibility.
+
 Deploy the immutable `sha-<short>` tag; `latest` tracks `main` and `v*` tags also publish semver tags.
 The reference Compose file and this documentation never pin `latest`. The image runs as the
 unprivileged `bun` user (UID 1000) with `CMD ["bun", "dist/server/main.mjs"]` and no shell wrapper.
