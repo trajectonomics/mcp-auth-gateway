@@ -34,11 +34,13 @@
 	],
 	"scripts": {
 		"build": "tsdown",
+		"start": "bun run src/server/main.ts",
 		"test": "bun test",
 		"typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
 		"lint": "biome ci --error-on-warnings .",
 		"format": "biome check --write .",
 		"check": "bun run lint && bun run typecheck && bun run test && bun run build && bun run lint:package",
+		"login:mobbin": "bun run src/login/cli.ts",
 		"lint:package": "publint --strict && attw --pack . --profile node16",
 		"skills:check": "bunx skills@latest check",
 		"skills:update": "bunx skills@latest update"

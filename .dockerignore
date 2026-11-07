@@ -1,0 +1,16 @@
+node_modules
+dist
+coverage
+.git
+.github
+.agents
+.claude
+.gemini
+.vscode
+.scratch
+docs
+*.log
+*.tgz
+.env
+.env.*
+.DS_Store
