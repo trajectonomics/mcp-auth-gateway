@@ -31,3 +31,61 @@ jobs:
 
       - name: Run verification checks
         run: bun run check
+
+  workflows:
+    name: Lint GitHub Actions workflows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run actionlint
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12
+
+  container:
+    name: Build & smoke-test container
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate Compose contract
+        env:
+          GATEWAY_IMAGE: ghcr.io/trajectonomics/mcp-auth-gateway:sha-ci
+          GATEWAY_INTERNAL_SECRET: 0123456789abcdef0123456789abcdef
+        run: docker compose config >/dev/null
+
+      - name: Build image
+        run: docker build -t mcp-auth-gateway:ci .
+
+      - name: Smoke-test gateway
+        run: |
+          set -euo pipefail
+          NAME="mcp-auth-gateway-ci"
+          VOLUME="mcp-auth-gateway-ci-data"
+          SECRET="$(openssl rand -hex 32)"
+          cleanup() {
+            docker rm -f "$NAME" >/dev/null 2>&1 || true
+            docker volume rm "$VOLUME" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker run -d --name "$NAME" --network host --read-only \
+            --cap-drop ALL --security-opt no-new-privileges \
+            -e HOST=127.0.0.1 -e PORT=18080 -e GATEWAY_INTERNAL_SECRET="$SECRET" \
+            -v "$VOLUME:/data" mcp-auth-gateway:ci
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/health >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs "$NAME"
+              exit 1
+            fi
+            sleep 1
+          done
+          test "$(curl -fsS http://127.0.0.1:18080/health)" = '{"status":"ok"}'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/health/token)" = "401"
+          curl -fsS -H "Authorization: Bearer $SECRET" \
+            http://127.0.0.1:18080/health/token | grep -q '"tokenState":"invalid"'
+          docker exec "$NAME" sh -c 'touch /data/write-probe && test -f /data/write-probe'
+          test "$(docker exec "$NAME" id -u)" = "1000"
