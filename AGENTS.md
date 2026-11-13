@@ -10,8 +10,20 @@ Instructions for AI coding agents in `trajectonomics/mcp-auth-gateway` (`@trajec
 4. Bun only: `bun install`, `bun test`, `bun run <script>`. Do not add npm/pnpm/yarn lockfiles.
 5. Done means `bun run check` passes (Biome lint with zero warnings, strict typecheck, tests, build, publint + are-the-types-wrong). `bun run format` fixes formatting and import order. Container or workflow changes must also pass the `container` and `workflows` CI jobs. Do not loosen `tsconfig.base.json` or `biome.json` to make an error go away.
 6. Never edit `version` in `package.json` and never run `npm publish` locally. Merges to `main` publish alphas; a stable release is the manual Release workflow. PR titles are conventional commits (`feat:`, `fix:`, `feat!:` ...) because they decide the next version (see README "Releasing").
-7. Pi (`pi.dev`) model restriction: When running the Pi coding agent (`pi.dev`), strictly use **DeepSeek 4.1 Flash** only (e.g., `deepseek/deepseek-v4.1-flash`, `deepseek/deepseek-v4.1-flash-fast`), whether routed via Command Code GOAT (`command-code`) or OpenCode Go (`opencode`). Do not switch to or run any other models (Claude, GPT, Gemini, etc.) in Pi sessions for this repository. This rule is mechanically enforced via `.pi/settings.json`.
+7. Model & Pi (`pi.dev`) rules:
+   - Never use `gemini-3.8-flash` anywhere; use `gemini-4-hydrogen` instead for Antigravity tasks and reviews (and `gemini-4-argon` where configured).
+   - When running the Pi coding agent (`pi.dev`), strictly use **DeepSeek 4.1 Flash** only (e.g., `deepseek/deepseek-v4.1-flash`, `deepseek/deepseek-v4.1-flash-fast`), whether routed via Command Code GOAT (`command-code`) or OpenCode Go (`opencode`). Do not switch to or run any other models (Claude, GPT, Gemini, etc.) in Pi sessions for this repository. This rule is mechanically enforced via `.pi/settings.json`.
+8. Temporary files & scratch clones: `/tmp` is a shared, nearly full tmpfs. Never use fixed `/tmp` filenames (use `mktemp` or `--body-file -` for `gh` bodies) or install `node_modules` / clone scratch repos under `/tmp`; use `~/.cache/<slug>`.
 
+## Owner
+
+Save owner attention:
+- Finish work end-to-end (commit, push, PR, independent review, `gh pr merge` when green/told to proceed, follow-up steps) without stopping for small permission questions or `## Not done yet` lists.
+- When unsure, consult subagents on other models (`claude-sonnet-5-5`, `gemini-4-hydrogen`, `gemini-4-argon`, `deepseek-v4.1-flash`) instead of asking the owner.
+- Check live GitHub state (`gh issue view`, `gh pr view`) and CLI/API schemas before claiming a blocker.
+- Keep owner replies short (lead with what only the owner must do).
+- Record durable lessons in repo instructions rather than agent memory.
+- Settle your own T3 thread (`t3_thread_organize`, `action: "settle"`) when done and nothing waits on the owner.
 
 ## Agent skills
 
