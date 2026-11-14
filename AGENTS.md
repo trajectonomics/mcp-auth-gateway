@@ -62,7 +62,7 @@ Host deployment, Compose, Tailscale, and runbooks live in `trajectonomics/infra#
 
 ### Installing and updating skills
 
-Skills come from [`mattpocock/skills`](https://github.com/mattpocock/skills) and [`trajectonomics/internal-skills`](https://github.com/trajectonomics/internal-skills) via the Vercel [`skills`](https://github.com/vercel-labs/skills) CLI and are pinned in `skills-lock.json`. The canonical copy is `.agents/skills/` (read natively by Codex, OpenCode, Pi, and Antigravity CLI); `.claude/skills/` holds symlinks into it for Claude Code. Never edit them by hand.
+Skills come from [`mattpocock/skills`](https://github.com/mattpocock/skills) and [`trajectonomics/internal-skills`](https://github.com/trajectonomics/internal-skills) via the Vercel [`skills`](https://github.com/vercel-labs/skills) CLI and are pinned in `skills-lock.json`. The canonical copy is `.agents/skills/` (read natively by Codex, OpenCode, Pi, and Antigravity CLI); `.claude/skills/` holds symlinks into it for Claude Code. `.vibe/skills/` holds the same symlinks for Mistral Vibe (`../../.agents/skills/<name>`). Never edit them by hand.
 
 - Update: `bun run skills:update` (or `npx skills update -p -y`)
 - Check status: `bun run skills:check` (or `npx skills check`)
