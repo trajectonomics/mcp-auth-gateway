@@ -15,6 +15,10 @@ Instructions for AI coding agents in `trajectonomics/mcp-auth-gateway` (`@trajec
    - When running the Pi coding agent (`pi.dev`), strictly use **DeepSeek 4.1 Flash** only (e.g., `deepseek/deepseek-v4.1-flash`, `deepseek/deepseek-v4.1-flash-fast`), whether routed via Command Code GOAT (`command-code`) or OpenCode Go (`opencode`). Do not switch to or run any other models (Claude, GPT, Gemini, etc.) in Pi sessions for this repository. This rule is mechanically enforced via `.pi/settings.json`.
 8. Temporary files & scratch clones: `/tmp` is a shared, nearly full tmpfs. Never use fixed `/tmp` filenames (use `mktemp` or `--body-file -` for `gh` bodies) or install `node_modules` / clone scratch repos under `/tmp`; use `~/.cache/<slug>`.
 
+## Organisation goals
+
+The organisation's goals are in https://github.com/trajectonomics/goals, `GOALS.md`. Read them before proposing a new direction. Only the owner edits that file; never edit it.
+
 ## Owner
 
 Save owner attention:
