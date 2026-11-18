@@ -22,7 +22,10 @@ services:
       GATEWAY_INTERNAL_SECRET: ${GATEWAY_INTERNAL_SECRET:?set GATEWAY_INTERNAL_SECRET to at least 32 bytes}
       HOST: 127.0.0.1
       PORT: ${PORT:-8080}
-      TOKEN_FILE: /data/tokens.json
+      # Token File paths default to Mobbin's /data/tokens.json and PostHog's
+      # /data/posthog-tokens.json; uncomment either line to move one.
+      # MOBBIN_TOKEN_FILE: /data/tokens.json
+      # POSTHOG_TOKEN_FILE: /data/posthog-tokens.json
     volumes:
       # Named volume, not a host directory: Docker seeds a fresh volume from the
       # image's /data, which the Dockerfile already chowns to the unprivileged

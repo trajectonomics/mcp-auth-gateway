@@ -2,8 +2,11 @@ import { describe, expect, it } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { MOBBIN_DEFAULTS } from "./defaults"
 import { createGatewayHandler } from "./gateway-handler"
 import type { GatewayFetch } from "./gateway-handler-types"
+import { tokenFileFixture } from "./testing/token-file-fixtures"
+import { mobbinUpstream } from "./testing/upstream-fixtures"
 import type { TokenFile } from "./token-file"
 import { createTokenManager } from "./token-manager"
 import type { TokenRefresher } from "./token-refresher"
@@ -11,19 +14,6 @@ import { createFileTokenStore, type TokenStore } from "./token-store"
 
 const SECRET = "0123456789abcdef0123456789abcdef"
 const NOW_MS = 1_700_000_000_000
-const UPSTREAM_URL = "https://upstream.example.com/mcp"
-
-function tokenFile(accessToken: string, expiresAt: number): TokenFile {
-	return Object.freeze({
-		issuer: "https://auth.example.com",
-		token_endpoint: "https://auth.example.com/token",
-		client_id: "client-abc",
-		resource: UPSTREAM_URL,
-		access_token: accessToken,
-		refresh_token: `refresh-${accessToken}`,
-		expires_at: expiresAt,
-	})
-}
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
 	let resolve: () => void = () => undefined
@@ -52,8 +42,7 @@ async function withGateway(
 		const tokenManager = createTokenManager({ store, refresher: options.refresher })
 		const handle = createGatewayHandler({
 			gatewaySecret: SECRET,
-			tokenManager,
-			upstreamUrl: UPSTREAM_URL,
+			upstreams: [mobbinUpstream(tokenManager)],
 			fetchImpl: options.fetchImpl,
 			nowMs: () => NOW_MS,
 		})
@@ -79,14 +68,14 @@ describe("Gateway refresh invariants", () => {
 			refreshes += 1
 			refreshStarted.resolve()
 			await releaseRefresh.promise
-			return tokenFile("access-2", NOW_MS + 900_000)
+			return tokenFileFixture(MOBBIN_DEFAULTS, "access-2", NOW_MS + 900_000)
 		}
 		const fetchImpl: GatewayFetch = async (_input, init) => {
 			seen.push(new Headers(init?.headers).get("authorization"))
 			return new Response("ok")
 		}
 		await withGateway(
-			{ initial: tokenFile("access-1", NOW_MS + 1), refresher, fetchImpl },
+			{ initial: tokenFileFixture(MOBBIN_DEFAULTS, "access-1", NOW_MS + 1), refresher, fetchImpl },
 			async (handle) => {
 				try {
 					const first = handle(proxyRequest())
@@ -110,7 +99,8 @@ describe("Gateway refresh invariants", () => {
 		const writeStarted = deferred()
 		const releaseWrite = deferred()
 		const seen: (string | null)[] = []
-		const refresher: TokenRefresher = async () => tokenFile("access-2", NOW_MS + 900_000)
+		const refresher: TokenRefresher = async () =>
+			tokenFileFixture(MOBBIN_DEFAULTS, "access-2", NOW_MS + 900_000)
 		const fetchImpl: GatewayFetch = async (_input, init) => {
 			seen.push(new Headers(init?.headers).get("authorization"))
 			return new Response("ok")
@@ -125,7 +115,12 @@ describe("Gateway refresh invariants", () => {
 				},
 			})
 		await withGateway(
-			{ initial: tokenFile("access-1", NOW_MS + 1), refresher, fetchImpl, wrapStore },
+			{
+				initial: tokenFileFixture(MOBBIN_DEFAULTS, "access-1", NOW_MS + 1),
+				refresher,
+				fetchImpl,
+				wrapStore,
+			},
 			async (handle) => {
 				try {
 					const pending = handle(proxyRequest())
@@ -147,8 +142,8 @@ describe("Gateway refresh invariants", () => {
 		}
 		await withGateway(
 			{
-				initial: tokenFile("access-1", NOW_MS + 900_000),
-				refresher: async () => tokenFile("access-2", NOW_MS + 900_000),
+				initial: tokenFileFixture(MOBBIN_DEFAULTS, "access-1", NOW_MS + 900_000),
+				refresher: async () => tokenFileFixture(MOBBIN_DEFAULTS, "access-2", NOW_MS + 900_000),
 				fetchImpl,
 			},
 			async (handle) => {

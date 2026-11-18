@@ -1,19 +1,12 @@
 import { describe, expect, it } from "bun:test"
+import { MOBBIN_DEFAULTS } from "./defaults"
 import { createGatewayHandler } from "./gateway-handler"
 import type { GatewayFetch } from "./gateway-handler-types"
-import type { TokenManager } from "./token-manager"
+import { posthogUpstream, tokenManagerFixture, upstreamFixture } from "./testing/upstream-fixtures"
 
 const SECRET = "0123456789abcdef0123456789abcdef"
 const UPSTREAM_URL = "https://upstream.example.com/mcp"
-
-const tokenManager: TokenManager = Object.freeze({
-	async getAccessToken(): Promise<string> {
-		return "access-token"
-	},
-	async getTokenState(): Promise<"valid"> {
-		return "valid"
-	},
-})
+const NOW_MS = 1_700_000_000_000
 
 interface UpstreamCall {
 	readonly url: string
@@ -29,10 +22,9 @@ function proxyWith(
 	}
 	return createGatewayHandler({
 		gatewaySecret: SECRET,
-		tokenManager,
-		upstreamUrl,
+		upstreams: [upstreamFixture({ ...MOBBIN_DEFAULTS, upstreamUrl }, tokenManagerFixture())],
 		fetchImpl,
-		nowMs: () => 1_700_000_000_000,
+		nowMs: () => NOW_MS,
 	})
 }
 
@@ -127,6 +119,43 @@ describe("Auth Relay Proxy request forwarding", () => {
 		expect(response.headers.get("proxy-connection")).toBeNull()
 		expect(response.headers.get("x-upstream-hop")).toBeNull()
 		expect(response.headers.get("x-upstream-keep")).toBe("keep")
+	})
+
+	it("passes PostHog session and project headers both ways and keeps project_id in the query", async () => {
+		let call: UpstreamCall | undefined
+		const handle = createGatewayHandler({
+			gatewaySecret: SECRET,
+			upstreams: [posthogUpstream(tokenManagerFixture({ accessToken: "posthog-token" }))],
+			fetchImpl: async (input, init) => {
+				call = { url: String(input), init: init ?? {} }
+				return new Response("{}", {
+					headers: { "mcp-session-id": "session-1", "x-posthog-project-id": "123" },
+				})
+			},
+			nowMs: () => NOW_MS,
+		})
+
+		const response = await handle(
+			authorized(
+				new Request("http://gateway.test/posthog/mcp?project_id=123", {
+					method: "POST",
+					headers: {
+						"content-type": "application/json",
+						"mcp-session-id": "session-1",
+						"x-posthog-project-id": "123",
+					},
+					body: "{}",
+				}),
+			),
+		)
+
+		expect(call?.url).toBe("https://mcp.posthog.com/mcp?project_id=123")
+		const sent = new Headers(call?.init.headers)
+		expect(sent.get("authorization")).toBe("Bearer posthog-token")
+		expect(sent.get("mcp-session-id")).toBe("session-1")
+		expect(sent.get("x-posthog-project-id")).toBe("123")
+		expect(response.headers.get("mcp-session-id")).toBe("session-1")
+		expect(response.headers.get("x-posthog-project-id")).toBe("123")
 	})
 
 	it("preserves a bodyless upstream status", async () => {

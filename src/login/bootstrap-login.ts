@@ -1,23 +1,22 @@
-import { DEFAULT_ISSUER, DEFAULT_RESOURCE } from "../defaults"
 import { parseTokenFile, type TokenFile } from "../token-file"
 import { createFileTokenStore } from "../token-store"
 import { createAuthorizeUrl } from "./authorize-url"
 import { startCallbackServer } from "./callback-server"
+import { discoverAuthorizationServer } from "./discovery"
 import { createCodeChallenge, createCodeVerifier, createState } from "./pkce"
 import { registerClient } from "./registration"
 import { exchangeCode } from "./token-exchange"
-import { authServerUrl } from "./urls"
 
-/** Injected inputs for the interactive Bootstrap Login. */
+/** Injected inputs for the interactive Bootstrap Login of one Upstream. */
 export interface BootstrapLoginDeps {
 	readonly fetchImpl: typeof fetch
 	readonly openBrowser: (url: string) => Promise<void>
 	readonly nowMs: () => number
 	readonly randomBytes: (length: number) => Uint8Array
 	readonly outPath: string
+	readonly issuer: string
+	readonly resource: string
 	readonly port?: number
-	readonly issuer?: string
-	readonly resource?: string
 }
 
 const DEFAULT_PORT = 9696
@@ -28,11 +27,17 @@ const RANDOM_BYTES_LENGTH = 32
  * A failed browser opener does not fail the login; the operator can use the printed URL.
  */
 export async function runBootstrapLogin(deps: BootstrapLoginDeps): Promise<TokenFile> {
-	const issuer = deps.issuer ?? DEFAULT_ISSUER
-	const resource = deps.resource ?? DEFAULT_RESOURCE
 	const port = deps.port ?? DEFAULT_PORT
 	const redirectUri = `http://127.0.0.1:${port}/callback`
-	const clientId = await registerClient({ fetchImpl: deps.fetchImpl, issuer, redirectUri })
+	const metadata = await discoverAuthorizationServer({
+		fetchImpl: deps.fetchImpl,
+		issuer: deps.issuer,
+	})
+	const clientId = await registerClient({
+		fetchImpl: deps.fetchImpl,
+		registrationEndpoint: metadata.registrationEndpoint,
+		redirectUri,
+	})
 	const codeVerifier = createCodeVerifier(deps.randomBytes(RANDOM_BYTES_LENGTH))
 	const codeChallenge = await createCodeChallenge(codeVerifier)
 	const state = createState(deps.randomBytes(RANDOM_BYTES_LENGTH))
@@ -40,12 +45,12 @@ export async function runBootstrapLogin(deps: BootstrapLoginDeps): Promise<Token
 	let code: string
 	try {
 		const authorizeUrl = createAuthorizeUrl({
-			issuer,
+			authorizationEndpoint: metadata.authorizationEndpoint,
 			clientId,
 			redirectUri,
 			codeChallenge,
 			state,
-			resource,
+			resource: deps.resource,
 		})
 		deps.openBrowser(authorizeUrl).catch(() => undefined)
 		code = await callback.waitForCode()
@@ -54,18 +59,18 @@ export async function runBootstrapLogin(deps: BootstrapLoginDeps): Promise<Token
 	}
 	const tokens = await exchangeCode({
 		fetchImpl: deps.fetchImpl,
-		tokenEndpoint: authServerUrl(issuer, "token"),
+		tokenEndpoint: metadata.tokenEndpoint,
 		code,
 		redirectUri,
 		clientId,
 		codeVerifier,
-		resource,
+		resource: deps.resource,
 	})
 	const tokenFile = parseTokenFile({
-		issuer,
-		token_endpoint: authServerUrl(issuer, "token"),
+		issuer: deps.issuer,
+		token_endpoint: metadata.tokenEndpoint,
 		client_id: clientId,
-		resource,
+		resource: deps.resource,
 		access_token: tokens.accessToken,
 		refresh_token: tokens.refreshToken,
 		expires_at: deps.nowMs() + tokens.expiresInSeconds * 1000,

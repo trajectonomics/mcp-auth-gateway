@@ -1,17 +1,16 @@
 import { isRecord } from "../is-record"
 import { BootstrapLoginError } from "./errors"
-import { authServerUrl } from "./urls"
 
 /** Inputs for OAuth 2.0 Dynamic Client Registration. */
 export interface RegisterClientOptions {
 	readonly fetchImpl: typeof fetch
-	readonly issuer: string
+	readonly registrationEndpoint: string
 	readonly redirectUri: string
 }
 
-/** Registers the gateway client and returns the runtime client_id. */
+/** Registers the gateway client at the discovered endpoint and returns the runtime client_id. */
 export async function registerClient(options: RegisterClientOptions): Promise<string> {
-	const endpoint = authServerUrl(options.issuer, "oauth/clients/register")
+	const endpoint = options.registrationEndpoint
 	let response: Response
 	try {
 		response = await options.fetchImpl(endpoint, {

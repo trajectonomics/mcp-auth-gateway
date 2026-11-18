@@ -17,6 +17,7 @@ const PUBLIC_RUNTIME_EXPORTS = [
 	"createState",
 	"createTokenManager",
 	"createTokenRefresher",
+	"discoverAuthorizationServer",
 	"evaluateTokenState",
 	"loadGatewayConfig",
 	"parseTokenFile",

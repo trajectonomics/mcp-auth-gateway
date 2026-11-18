@@ -1,13 +1,17 @@
 import { isRecord } from "./is-record"
+import type { TokenStoreErrorCode } from "./token-store-error"
 
 const RUNBOOK_URL = "https://github.com/trajectonomics/infra/issues/3"
 
-const REVOKED_MESSAGE =
-	"Mobbin refresh token revoked. Run `bun run login:mobbin` to re-authenticate. " +
-	`See the runbook at ${RUNBOOK_URL}.`
-
 /** JSON-RPC request identifier, or null when the request carried none. */
 export type JsonRpcId = string | number | null
+
+/** The Upstream facts an operator-facing error names. */
+export interface UpstreamErrorContext {
+	readonly displayName: string
+	readonly tokenFile: string
+	readonly loginCommand: string
+}
 
 /** Reads the JSON-RPC id from an already-buffered request body without failing the proxy. */
 export function readJsonRpcId(body: Uint8Array | undefined): JsonRpcId {
@@ -37,9 +41,29 @@ function jsonRpcErrorResponse(
 	})
 }
 
-/** Builds the Runbook JSON-RPC error returned when the Refresh Token is permanently revoked. */
-export function revokedRefreshTokenResponse(id: JsonRpcId): Response {
-	return jsonRpcErrorResponse(id, -32001, REVOKED_MESSAGE, 200, { runbook: RUNBOOK_URL })
+/** Builds the JSON-RPC error returned when an Upstream's Refresh Token is permanently revoked. */
+export function revokedRefreshTokenResponse(
+	id: JsonRpcId,
+	upstream: UpstreamErrorContext,
+): Response {
+	const message =
+		`${upstream.displayName} refresh token revoked. ` +
+		`Run \`${upstream.loginCommand}\` to re-authenticate. ` +
+		`See the runbook at ${RUNBOOK_URL}.`
+	return jsonRpcErrorResponse(id, -32001, message, 200, { runbook: RUNBOOK_URL })
+}
+
+/** Builds the JSON-RPC error returned when an Upstream's Token File cannot be used. */
+export function tokenFileUnusableResponse(
+	id: JsonRpcId,
+	upstream: UpstreamErrorContext,
+	code: TokenStoreErrorCode,
+): Response {
+	const message =
+		`${upstream.displayName} Token File at "${upstream.tokenFile}" cannot be used. ` +
+		`Run \`${upstream.loginCommand}\` to install it. ` +
+		`See the runbook at ${RUNBOOK_URL}.`
+	return jsonRpcErrorResponse(id, -32002, message, 502, { tokenFileCode: code })
 }
 
 /** Builds a sanitized JSON-RPC error for an unreachable or failing Upstream. */
