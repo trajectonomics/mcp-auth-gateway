@@ -2,8 +2,10 @@ import { describe, expect, it } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { MOBBIN_DEFAULTS } from "./defaults"
 import { createGatewayHandler } from "./gateway-handler"
 import type { GatewayFetch } from "./gateway-handler-types"
+import { mobbinUpstream } from "./testing/upstream-fixtures"
 import type { TokenFile } from "./token-file"
 import { createTokenManager } from "./token-manager"
 import type { TokenRefresher } from "./token-refresher"
@@ -11,7 +13,7 @@ import { createFileTokenStore, type TokenStore } from "./token-store"
 
 const SECRET = "0123456789abcdef0123456789abcdef"
 const NOW_MS = 1_700_000_000_000
-const UPSTREAM_URL = "https://upstream.example.com/mcp"
+const UPSTREAM_URL = MOBBIN_DEFAULTS.upstreamUrl
 
 function tokenFile(accessToken: string, expiresAt: number): TokenFile {
 	return Object.freeze({
@@ -52,8 +54,7 @@ async function withGateway(
 		const tokenManager = createTokenManager({ store, refresher: options.refresher })
 		const handle = createGatewayHandler({
 			gatewaySecret: SECRET,
-			tokenManager,
-			upstreamUrl: UPSTREAM_URL,
+			upstreams: [mobbinUpstream(tokenManager)],
 			fetchImpl: options.fetchImpl,
 			nowMs: () => NOW_MS,
 		})

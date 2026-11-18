@@ -1,17 +1,8 @@
 import { describe, expect, it } from "bun:test"
 import { createGatewayHandler } from "./gateway-handler"
-import type { TokenManager } from "./token-manager"
+import { mobbinUpstream, tokenManagerFixture } from "./testing/upstream-fixtures"
 
 const SECRET = "0123456789abcdef0123456789abcdef"
-
-const tokenManager: TokenManager = Object.freeze({
-	async getAccessToken(): Promise<string> {
-		return "access-token"
-	},
-	async getTokenState(): Promise<"valid"> {
-		return "valid"
-	},
-})
 
 function streamingUpstream(): Response {
 	const encoder = new TextEncoder()
@@ -36,8 +27,7 @@ describe("unbuffered response streaming", () => {
 	it("forwards the first upstream chunk before the stream finishes", async () => {
 		const handle = createGatewayHandler({
 			gatewaySecret: SECRET,
-			tokenManager,
-			upstreamUrl: "https://upstream.example.com/mcp",
+			upstreams: [mobbinUpstream(tokenManagerFixture())],
 			fetchImpl: async () => streamingUpstream(),
 			nowMs: () => 1_700_000_000_000,
 		})

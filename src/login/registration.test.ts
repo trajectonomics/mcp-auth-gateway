@@ -8,12 +8,16 @@ function fetchStub(
 	return Object.assign(handler, { preconnect: () => undefined })
 }
 
-const ISSUER = "https://auth.example.com/auth/v1"
+const REGISTRATION_ENDPOINT = "https://oauth.posthog.com/oauth/register/"
 const REDIRECT_URI = "http://127.0.0.1:9696/callback"
 
 async function registrationError(fetchImpl: typeof fetch): Promise<BootstrapLoginError> {
 	try {
-		await registerClient({ fetchImpl, issuer: ISSUER, redirectUri: REDIRECT_URI })
+		await registerClient({
+			fetchImpl,
+			registrationEndpoint: REGISTRATION_ENDPOINT,
+			redirectUri: REDIRECT_URI,
+		})
 	} catch (error) {
 		if (error instanceof BootstrapLoginError) return error
 		throw error
@@ -29,10 +33,14 @@ describe("Client Registration", () => {
 			return Response.json({ client_id: "client-abc" }, { status: 201 })
 		})
 
-		const clientId = await registerClient({ fetchImpl, issuer: ISSUER, redirectUri: REDIRECT_URI })
+		const clientId = await registerClient({
+			fetchImpl,
+			registrationEndpoint: REGISTRATION_ENDPOINT,
+			redirectUri: REDIRECT_URI,
+		})
 
 		expect(clientId).toBe("client-abc")
-		expect(captured?.url).toBe(`${ISSUER}/oauth/clients/register`)
+		expect(captured?.url).toBe(REGISTRATION_ENDPOINT)
 		expect(captured?.init?.method).toBe("POST")
 		expect(new Headers(captured?.init?.headers).get("content-type")).toBe("application/json")
 		expect(JSON.parse(String(captured?.init?.body))).toEqual({

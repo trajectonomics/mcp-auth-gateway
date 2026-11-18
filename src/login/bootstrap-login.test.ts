@@ -1,63 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises"
-import { connect, createServer } from "node:net"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
+import {
+	type CapturedRequest,
+	connectable,
+	fakeAuthorizationServer,
+	loginDeps,
+	reservePort,
+	sendCallback,
+} from "../testing/login-fixtures"
 import { parseTokenFile } from "../token-file"
 import { runBootstrapLogin } from "./bootstrap-login"
+import { authorizationServerMetadataUrls } from "./discovery"
 import { createCodeChallenge } from "./pkce"
 
 const ISSUER = "https://auth.example.com/auth/v1"
 const RESOURCE = "https://api.mobbin.com/mcp"
 const NOW = 1_700_000_000_000
-
-function fetchStub(
-	handler: (input: string | URL | Request, init?: RequestInit) => Promise<Response>,
-): typeof fetch {
-	return Object.assign(handler, { preconnect: () => undefined })
-}
-
-interface CapturedRequest {
-	readonly url: string
-	readonly init: RequestInit | undefined
-}
-
-function fakeFetch(requests: CapturedRequest[], tokenResponse: () => Response): typeof fetch {
-	return fetchStub(async (input, init) => {
-		const url = String(input)
-		requests.push({ url, init })
-		if (url === `${ISSUER}/oauth/clients/register`) {
-			return Response.json({ client_id: "client-abc" }, { status: 201 })
-		}
-		if (url === `${ISSUER}/token`) return tokenResponse()
-		throw new Error(`unexpected fetch: ${url}`)
-	})
-}
-
-function sendCallback(port: number, params: Record<string, string>): Promise<Response> {
-	const url = new URL(`http://127.0.0.1:${port}/callback`)
-	for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value)
-	return fetch(url)
-}
-
-function connectable(host: string, port: number): Promise<boolean> {
-	return new Promise((resolve) => {
-		const socket = connect({ host, port })
-		socket.once("connect", () => {
-			socket.destroy()
-			resolve(true)
-		})
-		socket.once("error", () => resolve(false))
-	})
-}
-
-async function reservePort(): Promise<number> {
-	const server = createServer()
-	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
-	const address = server.address()
-	const port = typeof address === "object" && address ? address.port : 0
-	await new Promise<void>((resolve) => server.close(() => resolve()))
-	return port
+const METADATA = {
+	issuer: ISSUER,
+	authorization_endpoint: `${ISSUER}/oauth/authorize`,
+	token_endpoint: `${ISSUER}/oauth/token`,
+	registration_endpoint: `${ISSUER}/oauth/clients/register`,
 }
 
 let directory: string
@@ -71,17 +36,17 @@ afterEach(async () => {
 })
 
 describe("Bootstrap Login", () => {
-	it("writes a Token File after a complete S256 PKCE login", async () => {
+	it("writes a Token File after a complete S256 PKCE login through discovered endpoints", async () => {
 		const port = await reservePort()
 		const outPath = join(directory, "data", "tokens.json")
 		const requests: CapturedRequest[] = []
-		const fetchImpl = fakeFetch(requests, () =>
-			Response.json({
-				access_token: "access-token",
-				refresh_token: "refresh-token",
-				expires_in: 3600,
-			}),
-		)
+		const fetchImpl = fakeAuthorizationServer({
+			metadataUrls: authorizationServerMetadataUrls(ISSUER),
+			metadata: METADATA,
+			registrationEndpoint: METADATA.registration_endpoint,
+			tokenEndpoint: METADATA.token_endpoint,
+			requests,
+		})
 		let authorizeUrl: URL | undefined
 		let callbackStatus = 0
 		let opener: Promise<void> | undefined
@@ -96,14 +61,9 @@ describe("Bootstrap Login", () => {
 		}
 
 		const tokenFile = await runBootstrapLogin({
-			fetchImpl,
-			openBrowser,
-			nowMs: () => NOW,
+			...loginDeps({ port, outPath, fetchImpl, openBrowser, issuer: ISSUER, resource: RESOURCE }),
 			randomBytes: (length) => new Uint8Array(length).fill(++randomCall),
-			outPath,
-			port,
-			issuer: ISSUER,
-			resource: RESOURCE,
+			nowMs: () => NOW,
 		})
 		await opener
 		if (!authorizeUrl) throw new Error("expected an authorize URL")
@@ -111,7 +71,7 @@ describe("Bootstrap Login", () => {
 		expect(callbackStatus).toBe(200)
 		expect(tokenFile).toEqual({
 			issuer: ISSUER,
-			token_endpoint: `${ISSUER}/token`,
+			token_endpoint: METADATA.token_endpoint,
 			client_id: "client-abc",
 			resource: RESOURCE,
 			access_token: "access-token",
@@ -125,7 +85,7 @@ describe("Bootstrap Login", () => {
 
 		const expectedVerifier = Buffer.from(new Uint8Array(32).fill(1)).toString("base64url")
 		const expectedState = Buffer.from(new Uint8Array(32).fill(2)).toString("base64url")
-		expect(authorizeUrl.origin + authorizeUrl.pathname).toBe(`${ISSUER}/authorize`)
+		expect(authorizeUrl.origin + authorizeUrl.pathname).toBe(METADATA.authorization_endpoint)
 		expect(authorizeUrl.searchParams.get("response_type")).toBe("code")
 		expect(authorizeUrl.searchParams.get("client_id")).toBe("client-abc")
 		expect(authorizeUrl.searchParams.get("redirect_uri")).toBe(`http://127.0.0.1:${port}/callback`)
@@ -137,6 +97,7 @@ describe("Bootstrap Login", () => {
 		expect(authorizeUrl.searchParams.get("resource")).toBe(RESOURCE)
 
 		const registration = requests.find((request) => request.url.endsWith("/register"))
+		expect(registration?.url).toBe(METADATA.registration_endpoint)
 		expect(JSON.parse(String(registration?.init?.body))).toEqual({
 			client_name: "mcp-auth-gateway",
 			redirect_uris: [`http://127.0.0.1:${port}/callback`],
@@ -145,6 +106,7 @@ describe("Bootstrap Login", () => {
 			token_endpoint_auth_method: "none",
 		})
 		const exchange = requests.find((request) => request.url.endsWith("/token"))
+		expect(exchange?.url).toBe(METADATA.token_endpoint)
 		expect(Object.fromEntries(new URLSearchParams(String(exchange?.init?.body)))).toEqual({
 			grant_type: "authorization_code",
 			code: "auth-code",

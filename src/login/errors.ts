@@ -1,5 +1,9 @@
 /** Domain error codes for a failed Bootstrap Login. */
 export type BootstrapLoginErrorCode =
+	| "issuer_invalid"
+	| "metadata_unavailable"
+	| "metadata_issuer_mismatch"
+	| "metadata_endpoint_missing"
 	| "client_registration_failed"
 	| "missing_client_id"
 	| "callback_listener_failed"

@@ -15,3 +15,14 @@ export class TokenStoreError extends Error {
 		this.code = code
 	}
 }
+
+const UNUSABLE_CODES = new Set<TokenStoreErrorCode>([
+	"token_file_missing",
+	"token_file_unreadable",
+	"token_file_corrupt",
+])
+
+/** Whether the store code means the operator must install that Token File. */
+export function isTokenFileUnusable(code: TokenStoreErrorCode): boolean {
+	return UNUSABLE_CODES.has(code)
+}

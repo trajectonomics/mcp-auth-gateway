@@ -1,9 +1,11 @@
 import { describe, expect, it } from "bun:test"
 import { createGatewayHandler } from "./gateway-handler"
+import { mobbinUpstream, posthogUpstream, tokenManagerFixture } from "./testing/upstream-fixtures"
 import type { TokenManager } from "./token-manager"
 import type { TokenState } from "./token-state"
 
 const SECRET = "0123456789abcdef0123456789abcdef"
+const NOW_MS = 1_700_000_000_000
 const FOUR_MIB = 4 * 1024 * 1024
 
 function tokenManager(state: TokenState = "valid"): TokenManager {
@@ -28,10 +30,9 @@ function handlerWith(manager: TokenManager): {
 	}
 	const handle = createGatewayHandler({
 		gatewaySecret: SECRET,
-		tokenManager: manager,
-		upstreamUrl: "https://upstream.example.com/mcp",
+		upstreams: [mobbinUpstream(manager)],
 		fetchImpl,
-		nowMs: () => 1_700_000_000_000,
+		nowMs: () => NOW_MS,
 	})
 	return { handle, upstreamCalls: () => calls }
 }
@@ -63,8 +64,8 @@ describe("bounded request buffering", () => {
 })
 
 describe("Token State health", () => {
-	it("reports an unreadable Token File as invalid instead of failing", async () => {
-		const manager: TokenManager = Object.freeze({
+	it("reports an unreadable Token File as invalid on its own Upstream only", async () => {
+		const unreadable: TokenManager = Object.freeze({
 			async getAccessToken(): Promise<string> {
 				return "access-token"
 			},
@@ -72,7 +73,15 @@ describe("Token State health", () => {
 				throw new Error("Token File is missing")
 			},
 		})
-		const { handle } = handlerWith(manager)
+		const handle = createGatewayHandler({
+			gatewaySecret: SECRET,
+			upstreams: [
+				mobbinUpstream(tokenManagerFixture({ tokenState: "valid" })),
+				posthogUpstream(unreadable),
+			],
+			fetchImpl: async () => new Response("ok"),
+			nowMs: () => NOW_MS,
+		})
 		const response = await handle(
 			new Request("http://gateway.test/health/token", {
 				headers: { authorization: `Bearer ${SECRET}` },
@@ -80,6 +89,8 @@ describe("Token State health", () => {
 		)
 
 		expect(response.status).toBe(200)
-		expect(await response.json()).toEqual({ tokenState: "invalid" })
+		expect(await response.json()).toEqual({
+			upstreams: { mobbin: { tokenState: "valid" }, posthog: { tokenState: "invalid" } },
+		})
 	})
 })

@@ -3,13 +3,20 @@
  */
 
 export { atomicWriteFile } from "./atomic-write"
+export type { UpstreamConfig } from "./defaults"
 export type { GatewayConfig, GatewayConfigErrorCode } from "./gateway-config"
 export { GatewayConfigError, loadGatewayConfig } from "./gateway-config"
 export { createGatewayHandler } from "./gateway-handler"
-export type { GatewayFetch, GatewayHandlerDeps } from "./gateway-handler-types"
+export type {
+	GatewayFetch,
+	GatewayHandlerDeps,
+	GatewayUpstream,
+} from "./gateway-handler-types"
 export { validateGatewaySecret } from "./gateway-secret"
 export type { BootstrapLoginDeps } from "./login/bootstrap-login"
 export { runBootstrapLogin } from "./login/bootstrap-login"
+export type { AuthorizationServerMetadata } from "./login/discovery"
+export { discoverAuthorizationServer } from "./login/discovery"
 export type { BootstrapLoginErrorCode } from "./login/errors"
 export { BootstrapLoginError } from "./login/errors"
 export type { PkceErrorCode } from "./login/pkce"

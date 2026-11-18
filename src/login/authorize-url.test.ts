@@ -1,21 +1,21 @@
 import { describe, expect, it } from "bun:test"
 import { createAuthorizeUrl } from "./authorize-url"
 
-const ISSUER = "https://auth.example.com/auth/v1"
+const AUTHORIZATION_ENDPOINT = "https://oauth.posthog.com/oauth/authorize/"
 const OPTIONS = {
-	issuer: ISSUER,
+	authorizationEndpoint: AUTHORIZATION_ENDPOINT,
 	clientId: "client-abc",
 	redirectUri: "http://127.0.0.1:9696/callback",
 	codeChallenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
 	state: "state-xyz",
-	resource: "https://api.mobbin.com/mcp",
+	resource: "https://mcp.posthog.com/mcp",
 }
 
 describe("Authorize URL", () => {
-	it("carries the S256 challenge, state, redirect URI, and resource", () => {
+	it("uses the discovered authorization endpoint and carries the S256 challenge", () => {
 		const url = new URL(createAuthorizeUrl(OPTIONS))
 
-		expect(url.origin + url.pathname).toBe(`${ISSUER}/authorize`)
+		expect(url.origin + url.pathname).toBe(AUTHORIZATION_ENDPOINT)
 		expect(url.searchParams.get("response_type")).toBe("code")
 		expect(url.searchParams.get("client_id")).toBe("client-abc")
 		expect(url.searchParams.get("redirect_uri")).toBe(OPTIONS.redirectUri)
@@ -29,11 +29,5 @@ describe("Authorize URL", () => {
 		const url = new URL(createAuthorizeUrl(OPTIONS))
 
 		expect([...url.searchParams.values()]).not.toContain("plain")
-	})
-
-	it("tolerates an issuer with a trailing slash", () => {
-		const url = new URL(createAuthorizeUrl({ ...OPTIONS, issuer: `${ISSUER}/` }))
-
-		expect(url.origin + url.pathname).toBe(`${ISSUER}/authorize`)
 	})
 })

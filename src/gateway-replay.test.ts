@@ -2,8 +2,10 @@ import { describe, expect, it } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { MOBBIN_DEFAULTS, POSTHOG_DEFAULTS } from "./defaults"
 import { createGatewayHandler } from "./gateway-handler"
 import type { GatewayFetch } from "./gateway-handler-types"
+import { countingTokenManager, upstreamFixture } from "./testing/upstream-fixtures"
 import type { TokenFile } from "./token-file"
 import { createTokenManager } from "./token-manager"
 import { TokenRefreshError } from "./token-refresh-error"
@@ -12,46 +14,60 @@ import { createFileTokenStore } from "./token-store"
 
 const SECRET = "0123456789abcdef0123456789abcdef"
 const NOW_MS = 1_700_000_000_000
-const UPSTREAM_URL = "https://upstream.example.com/mcp"
 
 function tokenFile(accessToken: string, expiresAt: number): TokenFile {
 	return Object.freeze({
 		issuer: "https://auth.example.com",
 		token_endpoint: "https://auth.example.com/token",
 		client_id: "client-abc",
-		resource: UPSTREAM_URL,
+		resource: "https://upstream.example.com/mcp",
 		access_token: accessToken,
 		refresh_token: `refresh-${accessToken}`,
 		expires_at: expiresAt,
 	})
 }
 
-async function withGateway(
-	initial: TokenFile,
-	refresher: TokenRefresher,
-	fetchImpl: GatewayFetch,
-	run: (handle: (request: Request) => Promise<Response>) => Promise<void>,
-): Promise<void> {
+interface GatewayOptions {
+	readonly refresher: TokenRefresher
+	readonly fetchImpl: GatewayFetch
+}
+
+interface Handle {
+	readonly handle: (request: Request) => Promise<Response>
+	readonly mobbinCalls: () => number
+	readonly posthogCalls: () => number
+}
+
+async function withGateway(options: GatewayOptions, run: (handle: Handle) => Promise<void>) {
 	const directory = await mkdtemp(join(tmpdir(), "gateway-replay-"))
 	try {
-		const store = createFileTokenStore({ path: join(directory, "tokens.json") })
-		await store.write(initial)
-		const tokenManager = createTokenManager({ store, refresher })
+		const mobbinStore = createFileTokenStore({ path: join(directory, "tokens.json") })
+		const posthogStore = createFileTokenStore({ path: join(directory, "posthog-tokens.json") })
+		await mobbinStore.write(tokenFile("mobbin-token", NOW_MS + 900_000))
+		await posthogStore.write(tokenFile("posthog-token", NOW_MS + 900_000))
+		const mobbin = countingTokenManager(
+			createTokenManager({ store: mobbinStore, refresher: options.refresher }),
+		)
+		const posthog = countingTokenManager(
+			createTokenManager({ store: posthogStore, refresher: options.refresher }),
+		)
 		const handle = createGatewayHandler({
 			gatewaySecret: SECRET,
-			tokenManager,
-			upstreamUrl: UPSTREAM_URL,
-			fetchImpl,
+			upstreams: [
+				upstreamFixture(MOBBIN_DEFAULTS, mobbin.manager),
+				upstreamFixture(POSTHOG_DEFAULTS, posthog.manager),
+			],
+			fetchImpl: options.fetchImpl,
 			nowMs: () => NOW_MS,
 		})
-		await run(handle)
+		await run({ handle, mobbinCalls: mobbin.calls, posthogCalls: posthog.calls })
 	} finally {
 		await rm(directory, { recursive: true, force: true })
 	}
 }
 
-function proxyRequest(id: number): Request {
-	return new Request("http://gateway.test/mobbin/mcp", {
+function proxyRequest(path: string, id: number): Request {
+	return new Request(`http://gateway.test${path}`, {
 		method: "POST",
 		headers: { authorization: `Bearer ${SECRET}`, "content-type": "application/json" },
 		body: JSON.stringify({ jsonrpc: "2.0", id, method: "tools/list" }),
@@ -73,67 +89,82 @@ describe("upstream 401 replay", () => {
 			})
 			return seen.length === 1 ? new Response("expired", { status: 401 }) : new Response("ok")
 		}
-		await withGateway(
-			tokenFile("access-1", NOW_MS + 900_000),
-			refresher,
-			fetchImpl,
-			async (handle) => {
-				const response = await handle(proxyRequest(7))
+		await withGateway({ refresher, fetchImpl }, async ({ handle }) => {
+			const response = await handle(proxyRequest("/mobbin/mcp", 7))
 
-				expect(response.status).toBe(200)
-				expect(await response.text()).toBe("ok")
-				expect(refreshes).toBe(1)
-				expect(seen.map((call) => call.auth)).toEqual(["Bearer access-1", "Bearer access-2"])
-				expect(seen[0]?.body).toBe(seen[1]?.body)
-			},
-		)
+			expect(response.status).toBe(200)
+			expect(await response.text()).toBe("ok")
+			expect(refreshes).toBe(1)
+			expect(seen.map((call) => call.auth)).toEqual(["Bearer mobbin-token", "Bearer access-2"])
+			expect(seen[0]?.body).toBe(seen[1]?.body)
+		})
 	})
 
-	it("stops after exactly one replay when upstream rejects the rotated token", async () => {
+	it("replays only the Upstream whose token was rejected", async () => {
+		const refreshed: string[] = []
+		const refresher: TokenRefresher = async ({ tokenFile: base }) => {
+			refreshed.push(base.access_token)
+			return tokenFile("posthog-token-2", NOW_MS + 900_000)
+		}
+		let posthogAttempts = 0
+		const fetchImpl: GatewayFetch = async (input) => {
+			if (!String(input).includes("posthog")) return new Response("ok")
+			posthogAttempts += 1
+			return posthogAttempts === 1 ? new Response("expired", { status: 401 }) : new Response("ok")
+		}
+		await withGateway({ refresher, fetchImpl }, async ({ handle, mobbinCalls }) => {
+			const response = await handle(proxyRequest("/posthog/mcp", 7))
+
+			expect(response.status).toBe(200)
+			expect(await response.text()).toBe("ok")
+			expect(refreshed).toEqual(["posthog-token"])
+			expect(posthogAttempts).toBe(2)
+			expect(mobbinCalls()).toBe(0)
+		})
+	})
+
+	it("stops after exactly one replay when the Upstream rejects the rotated token", async () => {
 		let refreshes = 0
 		const fetchImpl: GatewayFetch = async () => new Response("still expired", { status: 401 })
 		const refresher: TokenRefresher = async () => {
 			refreshes += 1
 			return tokenFile("access-2", NOW_MS + 900_000)
 		}
-		await withGateway(
-			tokenFile("access-1", NOW_MS + 900_000),
-			refresher,
-			fetchImpl,
-			async (handle) => {
-				const response = await handle(proxyRequest(7))
+		await withGateway({ refresher, fetchImpl }, async ({ handle }) => {
+			const response = await handle(proxyRequest("/mobbin/mcp", 7))
 
-				expect(response.status).toBe(401)
-				expect(refreshes).toBe(1)
-			},
-		)
+			expect(response.status).toBe(401)
+			expect(refreshes).toBe(1)
+		})
 	})
 
-	it("returns the Runbook JSON-RPC error when the Refresh Token is revoked", async () => {
+	it("names the routed Upstream and its login command when its Refresh Token is revoked", async () => {
 		const refresher: TokenRefresher = async () => {
 			throw new TokenRefreshError("refresh_token_revoked", "revoked upstream")
 		}
-		const fetchImpl: GatewayFetch = async () => new Response("expired", { status: 401 })
-		await withGateway(
-			tokenFile("access-1", NOW_MS + 900_000),
-			refresher,
-			fetchImpl,
-			async (handle) => {
-				const response = await handle(proxyRequest(7))
-				const body = (await response.json()) as {
-					jsonrpc: string
-					id: number
-					error: { code: number; message: string; data: { runbook: string } }
-				}
+		const fetchImpl: GatewayFetch = async (input) =>
+			String(input).includes("posthog")
+				? new Response("expired", { status: 401 })
+				: new Response("mobbin-ok")
+		await withGateway({ refresher, fetchImpl }, async ({ handle }) => {
+			const posthog = await handle(proxyRequest("/posthog/mcp", 7))
+			const body = (await posthog.json()) as {
+				jsonrpc: string
+				id: number
+				error: { code: number; message: string; data: { runbook: string } }
+			}
 
-				expect(response.status).toBe(200)
-				expect(response.headers.get("content-type")).toBe("application/json")
-				expect(body.jsonrpc).toBe("2.0")
-				expect(body.id).toBe(7)
-				expect(body.error.code).toBe(-32001)
-				expect(body.error.message).toContain("bun run login:mobbin")
-				expect(body.error.data.runbook).toBe("https://github.com/trajectonomics/infra/issues/3")
-			},
-		)
+			expect(posthog.status).toBe(200)
+			expect(body.jsonrpc).toBe("2.0")
+			expect(body.id).toBe(7)
+			expect(body.error.code).toBe(-32001)
+			expect(body.error.message).toContain("PostHog")
+			expect(body.error.message).toContain("bun run login:posthog")
+			expect(body.error.data.runbook).toBe("https://github.com/trajectonomics/infra/issues/3")
+
+			const mobbin = await handle(proxyRequest("/mobbin/mcp", 8))
+			expect(mobbin.status).toBe(200)
+			expect(await mobbin.text()).toBe("mobbin-ok")
+		})
 	})
 })

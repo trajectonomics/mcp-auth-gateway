@@ -1,23 +1,9 @@
 import { randomBytes as nodeRandomBytes } from "node:crypto"
-import { DEFAULT_TOKEN_FILE } from "../defaults"
+import { resolveUpstreams } from "../upstream-config"
 import { runBootstrapLogin } from "./bootstrap-login"
+import { parseLoginArgs } from "./cli-args"
 
 const OPENER_TIMEOUT_MS = 2000
-
-function parseOutPath(args: readonly string[]): string | undefined {
-	const [argument, value] = args
-	if (argument === undefined) return undefined
-	if (argument === "--out") {
-		if (!value) throw new Error("--out requires a Token File path")
-		return value
-	}
-	if (argument.startsWith("--out=")) {
-		const inlineValue = argument.slice("--out=".length)
-		if (!inlineValue) throw new Error("--out requires a Token File path")
-		return inlineValue
-	}
-	throw new Error(`Unknown argument: ${argument}`)
-}
 
 async function openBrowser(url: string): Promise<void> {
 	console.log(`Open this URL to complete the Bootstrap Login:\n${url}`)
@@ -32,20 +18,17 @@ async function openBrowser(url: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
-	const outPath =
-		parseOutPath(process.argv.slice(2)) ?? process.env["MOBBIN_TOKEN_FILE"] ?? DEFAULT_TOKEN_FILE
-	const issuer = process.env["MOBBIN_ISSUER"]
-	const resource = process.env["MOBBIN_RESOURCE"]
+	const target = parseLoginArgs(process.argv.slice(2), resolveUpstreams(process.env))
 	await runBootstrapLogin({
 		fetchImpl: fetch,
 		openBrowser,
 		nowMs: Date.now,
 		randomBytes: (length) => nodeRandomBytes(length),
-		outPath,
-		...(issuer ? { issuer } : {}),
-		...(resource ? { resource } : {}),
+		outPath: target.outPath,
+		issuer: target.upstream.issuer,
+		resource: target.upstream.resource,
 	})
-	console.log(`Token File written to ${outPath}`)
+	console.log(`Token File written to ${target.outPath}`)
 }
 
 main().catch((error: unknown) => {

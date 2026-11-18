@@ -1,33 +1,116 @@
 import { describe, expect, it } from "bun:test"
-import { GatewayConfigError, loadGatewayConfig } from "./gateway-config"
+import type { UpstreamConfig } from "./defaults"
+import { type GatewayConfig, GatewayConfigError, loadGatewayConfig } from "./gateway-config"
 
 const SECRET = "0123456789abcdef0123456789abcdef"
 
+function upstream(config: GatewayConfig, name: string): UpstreamConfig {
+	const found = config.upstreams.find((candidate) => candidate.name === name)
+	if (found === undefined) throw new Error(`expected an Upstream named ${name}`)
+	return found
+}
+
 describe("Gateway configuration", () => {
-	it("loads documented defaults", () => {
+	it("loads both Upstreams with their documented defaults", () => {
 		const config = loadGatewayConfig({ GATEWAY_INTERNAL_SECRET: SECRET })
 
-		expect(config).toEqual({
-			gatewaySecret: SECRET,
-			upstreamUrl: "https://api.mobbin.com/mcp",
-			tokenFile: "/data/tokens.json",
-			port: 8080,
-			host: "127.0.0.1",
-		})
-		expect(Object.isFrozen(config)).toBe(true)
+		expect(config.gatewaySecret).toBe(SECRET)
+		expect(config.port).toBe(8080)
+		expect(config.host).toBe("127.0.0.1")
+		expect(config.upstreams).toEqual([
+			{
+				name: "mobbin",
+				displayName: "Mobbin",
+				route: "/mobbin/mcp",
+				upstreamUrl: "https://api.mobbin.com/mcp",
+				issuer: "https://ujasntkfphywizsdaapi.supabase.co/auth/v1",
+				resource: "https://api.mobbin.com/mcp",
+				tokenFile: "/data/tokens.json",
+				loginCommand: "bun run login:mobbin",
+			},
+			{
+				name: "posthog",
+				displayName: "PostHog",
+				route: "/posthog/mcp",
+				upstreamUrl: "https://mcp.posthog.com/mcp",
+				issuer: "https://oauth.posthog.com",
+				resource: "https://mcp.posthog.com/mcp",
+				tokenFile: "/data/posthog-tokens.json",
+				loginCommand: "bun run login:posthog",
+			},
+		])
 	})
 
-	it("accepts explicit upstream, Token File, port, and host overrides", () => {
+	it("freezes the Upstream list and each Upstream", () => {
+		const config = loadGatewayConfig({ GATEWAY_INTERNAL_SECRET: SECRET })
+
+		expect(Object.isFrozen(config)).toBe(true)
+		expect(Object.isFrozen(config.upstreams)).toBe(true)
+		for (const entry of config.upstreams) expect(Object.isFrozen(entry)).toBe(true)
+	})
+
+	it("applies each prefixed override to its own Upstream only", () => {
 		const config = loadGatewayConfig({
 			GATEWAY_INTERNAL_SECRET: SECRET,
-			UPSTREAM_URL: "https://example.com/mcp",
-			TOKEN_FILE: "/tmp/tokens.json",
+			MOBBIN_UPSTREAM_URL: "https://mobbin.example.com/mcp",
+			MOBBIN_TOKEN_FILE: "/data/other-mobbin.json",
+			POSTHOG_UPSTREAM_URL: "https://posthog.example.com/mcp",
+			POSTHOG_ISSUER: "https://auth.posthog.example.com",
+			POSTHOG_RESOURCE: "https://posthog.example.com/mcp",
+			POSTHOG_TOKEN_FILE: "/data/other-posthog.json",
+		})
+
+		expect(upstream(config, "mobbin")).toEqual({
+			name: "mobbin",
+			displayName: "Mobbin",
+			route: "/mobbin/mcp",
+			upstreamUrl: "https://mobbin.example.com/mcp",
+			issuer: "https://ujasntkfphywizsdaapi.supabase.co/auth/v1",
+			resource: "https://api.mobbin.com/mcp",
+			tokenFile: "/data/other-mobbin.json",
+			loginCommand: "bun run login:mobbin",
+		})
+		expect(upstream(config, "posthog")).toEqual({
+			name: "posthog",
+			displayName: "PostHog",
+			route: "/posthog/mcp",
+			upstreamUrl: "https://posthog.example.com/mcp",
+			issuer: "https://auth.posthog.example.com",
+			resource: "https://posthog.example.com/mcp",
+			tokenFile: "/data/other-posthog.json",
+			loginCommand: "bun run login:posthog",
+		})
+	})
+
+	it("no longer reads the un-prefixed Upstream or Token File names", () => {
+		const config = loadGatewayConfig({
+			GATEWAY_INTERNAL_SECRET: SECRET,
+			UPSTREAM_URL: "https://legacy.example.com/mcp",
+			TOKEN_FILE: "/data/legacy.json",
+		})
+
+		expect(upstream(config, "mobbin").upstreamUrl).toBe("https://api.mobbin.com/mcp")
+		expect(upstream(config, "mobbin").tokenFile).toBe("/data/tokens.json")
+	})
+
+	it("keeps the default for an empty prefixed override", () => {
+		const config = loadGatewayConfig({
+			GATEWAY_INTERNAL_SECRET: SECRET,
+			POSTHOG_UPSTREAM_URL: "",
+			POSTHOG_TOKEN_FILE: "",
+		})
+
+		expect(upstream(config, "posthog").upstreamUrl).toBe("https://mcp.posthog.com/mcp")
+		expect(upstream(config, "posthog").tokenFile).toBe("/data/posthog-tokens.json")
+	})
+
+	it("accepts explicit port and host overrides", () => {
+		const config = loadGatewayConfig({
+			GATEWAY_INTERNAL_SECRET: SECRET,
 			PORT: "9999",
 			HOST: "127.0.0.2",
 		})
 
-		expect(config.upstreamUrl).toBe("https://example.com/mcp")
-		expect(config.tokenFile).toBe("/tmp/tokens.json")
 		expect(config.port).toBe(9999)
 		expect(config.host).toBe("127.0.0.2")
 	})

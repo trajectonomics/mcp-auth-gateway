@@ -13,7 +13,8 @@ WORKDIR /app
 ENV NODE_ENV=production \
 	PORT=8080 \
 	HOST=127.0.0.1 \
-	TOKEN_FILE=/data/tokens.json
+	MOBBIN_TOKEN_FILE=/data/tokens.json \
+	POSTHOG_TOKEN_FILE=/data/posthog-tokens.json
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production && rm -rf /home/bun/.bun/install/cache
 COPY --from=build /app/dist ./dist

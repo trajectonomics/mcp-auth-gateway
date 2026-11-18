@@ -1,10 +1,10 @@
-import { DEFAULT_TOKEN_FILE, DEFAULT_UPSTREAM_URL } from "./defaults"
+import type { UpstreamConfig } from "./defaults"
+import { readEnvValue, resolveUpstreams } from "./upstream-config"
 
 /** Runtime configuration for the HTTP Gateway. */
 export interface GatewayConfig {
 	readonly gatewaySecret: string
-	readonly upstreamUrl: string
-	readonly tokenFile: string
+	readonly upstreams: readonly UpstreamConfig[]
 	readonly port: number
 	readonly host: string
 }
@@ -46,19 +46,14 @@ export function loadGatewayConfig(env: Record<string, string | undefined>): Gate
 	}
 	return Object.freeze({
 		gatewaySecret,
-		upstreamUrl: valueOrDefault(env["UPSTREAM_URL"], DEFAULT_UPSTREAM_URL),
-		tokenFile: valueOrDefault(env["TOKEN_FILE"], DEFAULT_TOKEN_FILE),
+		upstreams: resolveUpstreams(env),
 		port: parsePort(env["PORT"]),
 		host: parseHost(env["HOST"]),
 	})
 }
 
-function valueOrDefault(value: string | undefined, fallback: string): string {
-	return value === undefined || value.length === 0 ? fallback : value
-}
-
 function parseHost(value: string | undefined): string {
-	const host = valueOrDefault(value, DEFAULT_HOST)
+	const host = readEnvValue(value, DEFAULT_HOST)
 	if (WILDCARD_HOSTS.has(host)) {
 		throw new GatewayConfigError(
 			"host_invalid",

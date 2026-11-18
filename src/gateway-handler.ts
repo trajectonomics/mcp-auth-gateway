@@ -1,12 +1,9 @@
-import type { GatewayHandlerDeps } from "./gateway-handler-types"
+import { DEFAULT_MAX_REQUEST_BYTES } from "./gateway-body"
+import type { GatewayHandlerDeps, GatewayUpstream } from "./gateway-handler-types"
 import { type GatewayProxyContext, proxyRequest } from "./gateway-proxy"
+import { resolveGatewayRoute } from "./gateway-routes"
 import { validateGatewaySecret } from "./gateway-secret"
-import type { TokenManager } from "./token-manager"
 import type { TokenState } from "./token-state"
-
-const HEALTH_PATHS = new Set(["/health", "/healthz"])
-const PROXY_PATH = "/mobbin/mcp"
-const TOKEN_HEALTH_PATH = "/health/token"
 
 function jsonResponse(body: unknown, status = 200): Response {
 	return new Response(JSON.stringify(body), {
@@ -19,14 +16,8 @@ function unauthorized(): Response {
 	return jsonResponse({ error: "unauthorized" }, 401)
 }
 
-type GatewayRoute = "health" | "token_health" | "proxy" | "not_found"
-
-function routeFor(request: Request): GatewayRoute {
-	const path = new URL(request.url).pathname
-	if (request.method === "GET" && HEALTH_PATHS.has(path)) return "health"
-	if (path === PROXY_PATH) return "proxy"
-	if (request.method === "GET" && path === TOKEN_HEALTH_PATH) return "token_health"
-	return "not_found"
+interface TokenStateReport {
+	readonly tokenState: TokenState
 }
 
 /** Creates the HTTP Gateway handler for health, Token State, and the Auth Relay Proxy. */
@@ -34,30 +25,39 @@ export function createGatewayHandler(
 	deps: GatewayHandlerDeps,
 ): (request: Request) => Promise<Response> {
 	const context: GatewayProxyContext = {
-		deps,
 		fetchImpl: deps.fetchImpl ?? fetch,
 		nowMs: deps.nowMs ?? Date.now,
+		maxRequestBytes: deps.maxRequestBytes ?? DEFAULT_MAX_REQUEST_BYTES,
 	}
 	return async function handle(request: Request): Promise<Response> {
-		const route = routeFor(request)
-		if (route === "health") return jsonResponse({ status: "ok" })
-		if (route === "not_found") return new Response("Not Found", { status: 404 })
+		const route = resolveGatewayRoute(request, deps.upstreams)
+		if (route.kind === "health") return jsonResponse({ status: "ok" })
+		if (route.kind === "not_found") return new Response("Not Found", { status: 404 })
 		if (!validateGatewaySecret(request.headers.get("authorization"), deps.gatewaySecret)) {
 			return unauthorized()
 		}
-		if (route === "token_health") {
-			return jsonResponse({ tokenState: await readTokenState(deps.tokenManager, context.nowMs) })
+		if (route.kind === "token_health") {
+			return jsonResponse({ upstreams: await readTokenStates(deps.upstreams, context.nowMs) })
 		}
-		return proxyRequest(context, request)
+		return proxyRequest(context, request, route.upstream)
 	}
 }
 
-async function readTokenState(
-	tokenManager: TokenManager,
+async function readTokenStates(
+	upstreams: readonly GatewayUpstream[],
 	nowMs: () => number,
-): Promise<TokenState> {
+): Promise<Record<string, TokenStateReport>> {
+	const reports = await Promise.all(
+		upstreams.map(async (upstream): Promise<[string, TokenStateReport]> => {
+			return [upstream.name, { tokenState: await readTokenState(upstream, nowMs) }]
+		}),
+	)
+	return Object.fromEntries(reports)
+}
+
+async function readTokenState(upstream: GatewayUpstream, nowMs: () => number): Promise<TokenState> {
 	try {
-		return await tokenManager.getTokenState(nowMs())
+		return await upstream.tokenManager.getTokenState(nowMs())
 	} catch {
 		return "invalid"
 	}
