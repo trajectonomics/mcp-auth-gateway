@@ -1,3 +1,4 @@
+import { trimTrailingSlashes } from "../trim-trailing-slashes"
 import { BootstrapLoginError } from "./errors"
 
 const METADATA_PATH = ".well-known/oauth-authorization-server"
@@ -14,8 +15,8 @@ export function authorizationServerMetadataUrls(issuer: string): readonly string
 			{ cause: error },
 		)
 	}
-	const path = url.pathname.replace(/\/+$/, "")
+	const path = trimTrailingSlashes(url.pathname)
 	const inserted = `${url.protocol}//${url.host}/${METADATA_PATH}${path}`
-	const appended = `${issuer.replace(/\/+$/, "")}/${METADATA_PATH}`
+	const appended = `${trimTrailingSlashes(issuer)}/${METADATA_PATH}`
 	return Object.freeze(inserted === appended ? [inserted] : [inserted, appended])
 }

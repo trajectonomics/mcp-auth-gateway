@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { MOBBIN_DEFAULTS } from "./defaults"
 import { createGatewayHandler } from "./gateway-handler"
 import type { GatewayFetch } from "./gateway-handler-types"
 import { tokenFileFixture } from "./testing/token-file-fixtures"
@@ -67,14 +68,14 @@ describe("Gateway refresh invariants", () => {
 			refreshes += 1
 			refreshStarted.resolve()
 			await releaseRefresh.promise
-			return tokenFileFixture("access-2", NOW_MS + 900_000)
+			return tokenFileFixture(MOBBIN_DEFAULTS, "access-2", NOW_MS + 900_000)
 		}
 		const fetchImpl: GatewayFetch = async (_input, init) => {
 			seen.push(new Headers(init?.headers).get("authorization"))
 			return new Response("ok")
 		}
 		await withGateway(
-			{ initial: tokenFileFixture("access-1", NOW_MS + 1), refresher, fetchImpl },
+			{ initial: tokenFileFixture(MOBBIN_DEFAULTS, "access-1", NOW_MS + 1), refresher, fetchImpl },
 			async (handle) => {
 				try {
 					const first = handle(proxyRequest())
@@ -98,7 +99,8 @@ describe("Gateway refresh invariants", () => {
 		const writeStarted = deferred()
 		const releaseWrite = deferred()
 		const seen: (string | null)[] = []
-		const refresher: TokenRefresher = async () => tokenFileFixture("access-2", NOW_MS + 900_000)
+		const refresher: TokenRefresher = async () =>
+			tokenFileFixture(MOBBIN_DEFAULTS, "access-2", NOW_MS + 900_000)
 		const fetchImpl: GatewayFetch = async (_input, init) => {
 			seen.push(new Headers(init?.headers).get("authorization"))
 			return new Response("ok")
@@ -113,7 +115,12 @@ describe("Gateway refresh invariants", () => {
 				},
 			})
 		await withGateway(
-			{ initial: tokenFileFixture("access-1", NOW_MS + 1), refresher, fetchImpl, wrapStore },
+			{
+				initial: tokenFileFixture(MOBBIN_DEFAULTS, "access-1", NOW_MS + 1),
+				refresher,
+				fetchImpl,
+				wrapStore,
+			},
 			async (handle) => {
 				try {
 					const pending = handle(proxyRequest())
@@ -135,8 +142,8 @@ describe("Gateway refresh invariants", () => {
 		}
 		await withGateway(
 			{
-				initial: tokenFileFixture("access-1", NOW_MS + 900_000),
-				refresher: async () => tokenFileFixture("access-2", NOW_MS + 900_000),
+				initial: tokenFileFixture(MOBBIN_DEFAULTS, "access-1", NOW_MS + 900_000),
+				refresher: async () => tokenFileFixture(MOBBIN_DEFAULTS, "access-2", NOW_MS + 900_000),
 				fetchImpl,
 			},
 			async (handle) => {

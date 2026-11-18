@@ -14,11 +14,11 @@ function argsError(run: () => unknown): LoginArgsError {
 
 describe("Bootstrap Login CLI arguments", () => {
 	it("selects the Upstream and defaults the Token File to its documented path", () => {
-		const target = parseLoginArgs(["--upstream", "posthog"], UPSTREAM_DEFAULTS)
+		const selection = parseLoginArgs(["--upstream", "posthog"], UPSTREAM_DEFAULTS)
 
-		expect(target.upstream).toEqual(POSTHOG_DEFAULTS)
-		expect(target.outPath).toBe("/data/posthog-tokens.json")
-		expect(Object.isFrozen(target)).toBe(true)
+		expect(selection.upstream).toEqual(POSTHOG_DEFAULTS)
+		expect(selection.outPath).toBe("/data/posthog-tokens.json")
+		expect(Object.isFrozen(selection)).toBe(true)
 	})
 
 	it("accepts --upstream and --out in either order", () => {
@@ -31,17 +31,20 @@ describe("Bootstrap Login CLI arguments", () => {
 			UPSTREAM_DEFAULTS,
 		)
 
-		for (const target of [outFirst, upstreamFirst]) {
-			expect(target.upstream).toEqual(POSTHOG_DEFAULTS)
-			expect(target.outPath).toBe("./posthog.json")
+		for (const selection of [outFirst, upstreamFirst]) {
+			expect(selection.upstream).toEqual(POSTHOG_DEFAULTS)
+			expect(selection.outPath).toBe("./posthog.json")
 		}
 	})
 
 	it("accepts --flag=value form", () => {
-		const target = parseLoginArgs(["--upstream=mobbin", "--out=./mobbin.json"], UPSTREAM_DEFAULTS)
+		const selection = parseLoginArgs(
+			["--upstream=mobbin", "--out=./mobbin.json"],
+			UPSTREAM_DEFAULTS,
+		)
 
-		expect(target.upstream).toEqual(MOBBIN_DEFAULTS)
-		expect(target.outPath).toBe("./mobbin.json")
+		expect(selection.upstream).toEqual(MOBBIN_DEFAULTS)
+		expect(selection.outPath).toBe("./mobbin.json")
 	})
 
 	it("refuses a missing Upstream", () => {

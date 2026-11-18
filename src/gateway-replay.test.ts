@@ -31,8 +31,8 @@ async function withGateway(options: GatewayOptions, run: (handle: Handle) => Pro
 	try {
 		const mobbinStore = createFileTokenStore({ path: join(directory, "tokens.json") })
 		const posthogStore = createFileTokenStore({ path: join(directory, "posthog-tokens.json") })
-		await mobbinStore.write(tokenFileFixture("mobbin-token", NOW_MS + 900_000))
-		await posthogStore.write(tokenFileFixture("posthog-token", NOW_MS + 900_000))
+		await mobbinStore.write(tokenFileFixture(MOBBIN_DEFAULTS, "mobbin-token", NOW_MS + 900_000))
+		await posthogStore.write(tokenFileFixture(POSTHOG_DEFAULTS, "posthog-token", NOW_MS + 900_000))
 		const mobbin = countingTokenManager(
 			createTokenManager({ store: mobbinStore, refresher: options.refresher }),
 		)
@@ -68,7 +68,7 @@ describe("upstream 401 replay", () => {
 		const seen: { auth: string | null; body: string }[] = []
 		const refresher: TokenRefresher = async () => {
 			refreshes += 1
-			return tokenFileFixture("access-2", NOW_MS + 900_000)
+			return tokenFileFixture(MOBBIN_DEFAULTS, "access-2", NOW_MS + 900_000)
 		}
 		const fetchImpl: GatewayFetch = async (_input, init) => {
 			seen.push({
@@ -92,7 +92,7 @@ describe("upstream 401 replay", () => {
 		const refreshed: string[] = []
 		const refresher: TokenRefresher = async ({ tokenFile: base }) => {
 			refreshed.push(base.access_token)
-			return tokenFileFixture("posthog-token-2", NOW_MS + 900_000)
+			return tokenFileFixture(POSTHOG_DEFAULTS, "posthog-token-2", NOW_MS + 900_000)
 		}
 		let posthogAttempts = 0
 		const fetchImpl: GatewayFetch = async (input) => {
@@ -116,7 +116,7 @@ describe("upstream 401 replay", () => {
 		const fetchImpl: GatewayFetch = async () => new Response("still expired", { status: 401 })
 		const refresher: TokenRefresher = async () => {
 			refreshes += 1
-			return tokenFileFixture("access-2", NOW_MS + 900_000)
+			return tokenFileFixture(MOBBIN_DEFAULTS, "access-2", NOW_MS + 900_000)
 		}
 		await withGateway({ refresher, fetchImpl }, async ({ handle }) => {
 			const response = await handle(proxyRequest("/mobbin/mcp", 7))

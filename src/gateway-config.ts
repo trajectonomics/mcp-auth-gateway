@@ -1,5 +1,6 @@
 import type { UpstreamConfig } from "./defaults"
-import { readEnvValue, resolveUpstreams } from "./upstream-config"
+import { readEnvValue } from "./env-value"
+import { resolveUpstreams } from "./upstream-config"
 
 /** Runtime configuration for the HTTP Gateway. */
 export interface GatewayConfig {

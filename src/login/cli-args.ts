@@ -1,7 +1,7 @@
 import type { UpstreamConfig } from "../defaults"
 
-/** Resolved Bootstrap Login target: one Upstream and the Token File path to write. */
-export interface LoginTarget {
+/** Resolved Bootstrap Login selection: one Upstream and the Token File path to write. */
+export interface LoginSelection {
 	readonly upstream: UpstreamConfig
 	readonly outPath: string
 }
@@ -35,7 +35,7 @@ const OPTIONS = [
 export function parseLoginArgs(
 	args: readonly string[],
 	upstreams: readonly UpstreamConfig[],
-): LoginTarget {
+): LoginSelection {
 	const options = readOptions(args)
 	const upstream = upstreams.find((candidate) => candidate.name === options.upstream)
 	if (upstream === undefined) {

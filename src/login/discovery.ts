@@ -1,4 +1,5 @@
 import { isRecord } from "../is-record"
+import { trimTrailingSlashes } from "../trim-trailing-slashes"
 import { BootstrapLoginError } from "./errors"
 import { authorizationServerMetadataUrls } from "./metadata-urls"
 
@@ -24,7 +25,10 @@ export async function discoverAuthorizationServer(
 		authorizationServerMetadataUrls(options.issuer),
 	)
 	const issuer = metadata["issuer"]
-	if (typeof issuer !== "string" || normalizeIssuer(issuer) !== normalizeIssuer(options.issuer)) {
+	if (
+		typeof issuer !== "string" ||
+		trimTrailingSlashes(issuer) !== trimTrailingSlashes(options.issuer)
+	) {
 		throw new BootstrapLoginError(
 			"metadata_issuer_mismatch",
 			`Authorization server metadata does not echo the issuer "${options.issuer}"`,
@@ -35,10 +39,6 @@ export async function discoverAuthorizationServer(
 		tokenEndpoint: readEndpoint(metadata, "token_endpoint"),
 		registrationEndpoint: readEndpoint(metadata, "registration_endpoint"),
 	})
-}
-
-function normalizeIssuer(issuer: string): string {
-	return issuer.replace(/\/+$/, "")
 }
 
 async function readMetadata(

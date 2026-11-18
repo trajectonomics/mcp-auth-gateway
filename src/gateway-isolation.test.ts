@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { MOBBIN_DEFAULTS, POSTHOG_DEFAULTS } from "./defaults"
@@ -85,7 +85,10 @@ describe("per-Upstream isolation", () => {
 		await withGateway(
 			{
 				prepare: async (paths) =>
-					writeTokenFile(paths.mobbin, tokenFileFixture("mobbin", NOW_MS + 900_000)),
+					writeTokenFile(
+						paths.mobbin,
+						tokenFileFixture(MOBBIN_DEFAULTS, "mobbin", NOW_MS + 900_000),
+					),
 			},
 			async (handle) => {
 				const mobbin = await handle(proxyRequest("/mobbin/mcp"))
@@ -109,7 +112,10 @@ describe("per-Upstream isolation", () => {
 		await withGateway(
 			{
 				prepare: async (paths) => {
-					await writeTokenFile(paths.mobbin, tokenFileFixture("mobbin", NOW_MS + 900_000))
+					await writeTokenFile(
+						paths.mobbin,
+						tokenFileFixture(MOBBIN_DEFAULTS, "mobbin", NOW_MS + 900_000),
+					)
 					await writeFile(paths.posthog, "not a Token File")
 				},
 			},
@@ -125,6 +131,29 @@ describe("per-Upstream isolation", () => {
 		)
 	})
 
+	it("reports an unreadable PostHog Token File as -32002 with its store code", async () => {
+		await withGateway(
+			{
+				prepare: async (paths) => {
+					await writeTokenFile(
+						paths.mobbin,
+						tokenFileFixture(MOBBIN_DEFAULTS, "mobbin", NOW_MS + 900_000),
+					)
+					await mkdir(paths.posthog)
+				},
+			},
+			async (handle) => {
+				expect((await handle(proxyRequest("/mobbin/mcp"))).status).toBe(200)
+
+				const posthog = await handle(proxyRequest("/posthog/mcp"))
+				const body = (await posthog.json()) as ErrorBody
+				expect(posthog.status).toBe(502)
+				expect(body.error.code).toBe(-32002)
+				expect(body.error.data).toEqual({ tokenFileCode: "token_file_unreadable" })
+			},
+		)
+	})
+
 	it("keeps Mobbin serving when PostHog's Refresh Token is revoked", async () => {
 		const refresher: TokenRefresher = async () => {
 			throw new TokenRefreshError("refresh_token_revoked", "revoked upstream")
@@ -133,8 +162,14 @@ describe("per-Upstream isolation", () => {
 			{
 				posthogRefresher: refresher,
 				prepare: async (paths) => {
-					await writeTokenFile(paths.mobbin, tokenFileFixture("mobbin", NOW_MS + 900_000))
-					await writeTokenFile(paths.posthog, tokenFileFixture("posthog", NOW_MS + 1))
+					await writeTokenFile(
+						paths.mobbin,
+						tokenFileFixture(MOBBIN_DEFAULTS, "mobbin", NOW_MS + 900_000),
+					)
+					await writeTokenFile(
+						paths.posthog,
+						tokenFileFixture(POSTHOG_DEFAULTS, "posthog", NOW_MS + 1),
+					)
 				},
 			},
 			async (handle) => {

@@ -18,17 +18,17 @@ async function openBrowser(url: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
-	const target = parseLoginArgs(process.argv.slice(2), resolveUpstreams(process.env))
+	const selection = parseLoginArgs(process.argv.slice(2), resolveUpstreams(process.env))
 	await runBootstrapLogin({
 		fetchImpl: fetch,
 		openBrowser,
 		nowMs: Date.now,
 		randomBytes: (length) => nodeRandomBytes(length),
-		outPath: target.outPath,
-		issuer: target.upstream.issuer,
-		resource: target.upstream.resource,
+		outPath: selection.outPath,
+		issuer: selection.upstream.issuer,
+		resource: selection.upstream.resource,
 	})
-	console.log(`Token File written to ${target.outPath}`)
+	console.log(`Token File written to ${selection.outPath}`)
 }
 
 main().catch((error: unknown) => {
