@@ -8,17 +8,6 @@ const SECRET = "0123456789abcdef0123456789abcdef"
 const NOW_MS = 1_700_000_000_000
 const FOUR_MIB = 4 * 1024 * 1024
 
-function tokenManager(state: TokenState = "valid"): TokenManager {
-	return Object.freeze({
-		async getAccessToken(): Promise<string> {
-			return "access-token"
-		},
-		async getTokenState(): Promise<TokenState> {
-			return state
-		},
-	})
-}
-
 function handlerWith(manager: TokenManager): {
 	handle: (request: Request) => Promise<Response>
 	upstreamCalls: () => number
@@ -47,7 +36,7 @@ function authorizedRequest(body: Uint8Array): Request {
 
 describe("bounded request buffering", () => {
 	it("accepts a body of exactly four mebibytes", async () => {
-		const { handle, upstreamCalls } = handlerWith(tokenManager())
+		const { handle, upstreamCalls } = handlerWith(tokenManagerFixture())
 		const response = await handle(authorizedRequest(new Uint8Array(FOUR_MIB)))
 
 		expect(response.status).toBe(200)
@@ -55,7 +44,7 @@ describe("bounded request buffering", () => {
 	})
 
 	it("rejects a body over four mebibytes before calling upstream", async () => {
-		const { handle, upstreamCalls } = handlerWith(tokenManager())
+		const { handle, upstreamCalls } = handlerWith(tokenManagerFixture())
 		const response = await handle(authorizedRequest(new Uint8Array(FOUR_MIB + 1)))
 
 		expect(response.status).toBe(413)

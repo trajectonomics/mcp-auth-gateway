@@ -5,6 +5,7 @@ import { join } from "node:path"
 import { MOBBIN_DEFAULTS, POSTHOG_DEFAULTS } from "./defaults"
 import { createGatewayHandler } from "./gateway-handler"
 import type { GatewayFetch } from "./gateway-handler-types"
+import { tokenFileFixture } from "./testing/token-file-fixtures"
 import { tokenManagerFixture, upstreamFixture } from "./testing/upstream-fixtures"
 import type { TokenFile } from "./token-file"
 import { createTokenManager } from "./token-manager"
@@ -15,18 +16,6 @@ import { TokenStoreError } from "./token-store-error"
 
 const SECRET = "0123456789abcdef0123456789abcdef"
 const NOW_MS = 1_700_000_000_000
-
-function tokenFile(accessToken: string, expiresAt: number): TokenFile {
-	return Object.freeze({
-		issuer: "https://auth.example.com",
-		token_endpoint: "https://auth.example.com/token",
-		client_id: "client-abc",
-		resource: "https://upstream.example.com/mcp",
-		access_token: accessToken,
-		refresh_token: `refresh-${accessToken}`,
-		expires_at: expiresAt,
-	})
-}
 
 function proxyRequest(path: string): Request {
 	return new Request(`http://gateway.test${path}`, {
@@ -41,7 +30,7 @@ interface ErrorBody {
 	readonly error: {
 		readonly code: number
 		readonly message: string
-		readonly data?: { readonly tokenFile?: string }
+		readonly data?: { readonly tokenFileCode?: string }
 	}
 }
 
@@ -96,7 +85,7 @@ describe("per-Upstream isolation", () => {
 		await withGateway(
 			{
 				prepare: async (paths) =>
-					writeTokenFile(paths.mobbin, tokenFile("mobbin", NOW_MS + 900_000)),
+					writeTokenFile(paths.mobbin, tokenFileFixture("mobbin", NOW_MS + 900_000)),
 			},
 			async (handle) => {
 				const mobbin = await handle(proxyRequest("/mobbin/mcp"))
@@ -111,7 +100,7 @@ describe("per-Upstream isolation", () => {
 				expect(body.error.message).toContain("PostHog")
 				expect(body.error.message).toContain("posthog-tokens.json")
 				expect(body.error.message).toContain("bun run login:posthog")
-				expect(body.error.data).toEqual({ tokenFile: "token_file_missing" })
+				expect(body.error.data).toEqual({ tokenFileCode: "token_file_missing" })
 			},
 		)
 	})
@@ -120,7 +109,7 @@ describe("per-Upstream isolation", () => {
 		await withGateway(
 			{
 				prepare: async (paths) => {
-					await writeTokenFile(paths.mobbin, tokenFile("mobbin", NOW_MS + 900_000))
+					await writeTokenFile(paths.mobbin, tokenFileFixture("mobbin", NOW_MS + 900_000))
 					await writeFile(paths.posthog, "not a Token File")
 				},
 			},
@@ -131,7 +120,7 @@ describe("per-Upstream isolation", () => {
 				const body = (await posthog.json()) as ErrorBody
 				expect(posthog.status).toBe(502)
 				expect(body.error.code).toBe(-32002)
-				expect(body.error.data).toEqual({ tokenFile: "token_file_corrupt" })
+				expect(body.error.data).toEqual({ tokenFileCode: "token_file_corrupt" })
 			},
 		)
 	})
@@ -144,8 +133,8 @@ describe("per-Upstream isolation", () => {
 			{
 				posthogRefresher: refresher,
 				prepare: async (paths) => {
-					await writeTokenFile(paths.mobbin, tokenFile("mobbin", NOW_MS + 900_000))
-					await writeTokenFile(paths.posthog, tokenFile("posthog", NOW_MS + 1))
+					await writeTokenFile(paths.mobbin, tokenFileFixture("mobbin", NOW_MS + 900_000))
+					await writeTokenFile(paths.posthog, tokenFileFixture("posthog", NOW_MS + 1))
 				},
 			},
 			async (handle) => {

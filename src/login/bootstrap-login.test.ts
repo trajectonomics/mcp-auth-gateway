@@ -12,7 +12,7 @@ import {
 } from "../testing/login-fixtures"
 import { parseTokenFile } from "../token-file"
 import { runBootstrapLogin } from "./bootstrap-login"
-import { authorizationServerMetadataUrls } from "./discovery"
+import { authorizationServerMetadataUrls } from "./metadata-urls"
 import { createCodeChallenge } from "./pkce"
 
 const ISSUER = "https://auth.example.com/auth/v1"

@@ -1,6 +1,16 @@
 import { describe, expect, it } from "bun:test"
 import { MOBBIN_DEFAULTS, POSTHOG_DEFAULTS, UPSTREAM_DEFAULTS } from "../defaults"
-import { parseLoginArgs } from "./cli-args"
+import { LoginArgsError, parseLoginArgs } from "./cli-args"
+
+function argsError(run: () => unknown): LoginArgsError {
+	try {
+		run()
+	} catch (error) {
+		if (error instanceof LoginArgsError) return error
+		throw error
+	}
+	throw new Error("expected parseLoginArgs to throw")
+}
 
 describe("Bootstrap Login CLI arguments", () => {
 	it("selects the Upstream and defaults the Token File to its documented path", () => {
@@ -34,21 +44,32 @@ describe("Bootstrap Login CLI arguments", () => {
 		expect(target.outPath).toBe("./mobbin.json")
 	})
 
-	it("refuses a missing, unknown or valueless Upstream", () => {
-		expect(() => parseLoginArgs([], UPSTREAM_DEFAULTS)).toThrow("--upstream")
-		expect(() => parseLoginArgs(["--upstream", "mailchimp"], UPSTREAM_DEFAULTS)).toThrow(
-			"mailchimp",
-		)
-		expect(() => parseLoginArgs(["--upstream"], UPSTREAM_DEFAULTS)).toThrow("--upstream")
-		expect(() => parseLoginArgs(["--upstream="], UPSTREAM_DEFAULTS)).toThrow("--upstream")
+	it("refuses a missing Upstream", () => {
+		const error = argsError(() => parseLoginArgs([], UPSTREAM_DEFAULTS))
+
+		expect(error.code).toBe("upstream_missing")
 	})
 
-	it("refuses a valueless or unknown argument", () => {
-		expect(() => parseLoginArgs(["--upstream", "mobbin", "--out"], UPSTREAM_DEFAULTS)).toThrow(
-			"--out",
+	it("refuses an unknown Upstream", () => {
+		const error = argsError(() => parseLoginArgs(["--upstream", "mailchimp"], UPSTREAM_DEFAULTS))
+
+		expect(error.code).toBe("upstream_unknown")
+		expect(error.message).toContain("mailchimp")
+	})
+
+	it("refuses an option without a value", () => {
+		for (const args of [["--upstream"], ["--upstream="], ["--upstream", "mobbin", "--out"]]) {
+			const error = argsError(() => parseLoginArgs(args, UPSTREAM_DEFAULTS))
+
+			expect(error.code).toBe("option_value_missing")
+		}
+	})
+
+	it("refuses an unknown argument", () => {
+		const error = argsError(() =>
+			parseLoginArgs(["--upstream", "mobbin", "--wat"], UPSTREAM_DEFAULTS),
 		)
-		expect(() => parseLoginArgs(["--upstream", "mobbin", "--wat"], UPSTREAM_DEFAULTS)).toThrow(
-			"Unknown argument",
-		)
+
+		expect(error.code).toBe("option_unknown")
 	})
 })

@@ -5,8 +5,8 @@ import { join } from "node:path"
 import { MOBBIN_DEFAULTS, POSTHOG_DEFAULTS } from "./defaults"
 import { createGatewayHandler } from "./gateway-handler"
 import type { GatewayFetch } from "./gateway-handler-types"
+import { tokenFileFixture } from "./testing/token-file-fixtures"
 import { countingTokenManager, upstreamFixture } from "./testing/upstream-fixtures"
-import type { TokenFile } from "./token-file"
 import { createTokenManager } from "./token-manager"
 import { TokenRefreshError } from "./token-refresh-error"
 import type { TokenRefresher } from "./token-refresher"
@@ -14,18 +14,6 @@ import { createFileTokenStore } from "./token-store"
 
 const SECRET = "0123456789abcdef0123456789abcdef"
 const NOW_MS = 1_700_000_000_000
-
-function tokenFile(accessToken: string, expiresAt: number): TokenFile {
-	return Object.freeze({
-		issuer: "https://auth.example.com",
-		token_endpoint: "https://auth.example.com/token",
-		client_id: "client-abc",
-		resource: "https://upstream.example.com/mcp",
-		access_token: accessToken,
-		refresh_token: `refresh-${accessToken}`,
-		expires_at: expiresAt,
-	})
-}
 
 interface GatewayOptions {
 	readonly refresher: TokenRefresher
@@ -43,8 +31,8 @@ async function withGateway(options: GatewayOptions, run: (handle: Handle) => Pro
 	try {
 		const mobbinStore = createFileTokenStore({ path: join(directory, "tokens.json") })
 		const posthogStore = createFileTokenStore({ path: join(directory, "posthog-tokens.json") })
-		await mobbinStore.write(tokenFile("mobbin-token", NOW_MS + 900_000))
-		await posthogStore.write(tokenFile("posthog-token", NOW_MS + 900_000))
+		await mobbinStore.write(tokenFileFixture("mobbin-token", NOW_MS + 900_000))
+		await posthogStore.write(tokenFileFixture("posthog-token", NOW_MS + 900_000))
 		const mobbin = countingTokenManager(
 			createTokenManager({ store: mobbinStore, refresher: options.refresher }),
 		)
@@ -80,7 +68,7 @@ describe("upstream 401 replay", () => {
 		const seen: { auth: string | null; body: string }[] = []
 		const refresher: TokenRefresher = async () => {
 			refreshes += 1
-			return tokenFile("access-2", NOW_MS + 900_000)
+			return tokenFileFixture("access-2", NOW_MS + 900_000)
 		}
 		const fetchImpl: GatewayFetch = async (_input, init) => {
 			seen.push({
@@ -104,7 +92,7 @@ describe("upstream 401 replay", () => {
 		const refreshed: string[] = []
 		const refresher: TokenRefresher = async ({ tokenFile: base }) => {
 			refreshed.push(base.access_token)
-			return tokenFile("posthog-token-2", NOW_MS + 900_000)
+			return tokenFileFixture("posthog-token-2", NOW_MS + 900_000)
 		}
 		let posthogAttempts = 0
 		const fetchImpl: GatewayFetch = async (input) => {
@@ -128,7 +116,7 @@ describe("upstream 401 replay", () => {
 		const fetchImpl: GatewayFetch = async () => new Response("still expired", { status: 401 })
 		const refresher: TokenRefresher = async () => {
 			refreshes += 1
-			return tokenFile("access-2", NOW_MS + 900_000)
+			return tokenFileFixture("access-2", NOW_MS + 900_000)
 		}
 		await withGateway({ refresher, fetchImpl }, async ({ handle }) => {
 			const response = await handle(proxyRequest("/mobbin/mcp", 7))

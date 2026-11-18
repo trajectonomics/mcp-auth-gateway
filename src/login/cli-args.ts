@@ -6,68 +6,82 @@ export interface LoginTarget {
 	readonly outPath: string
 }
 
+/** Domain error codes for refusing Bootstrap Login CLI arguments. */
+export type LoginArgsErrorCode =
+	| "upstream_missing"
+	| "upstream_unknown"
+	| "option_value_missing"
+	| "option_unknown"
+
+/** Error thrown when the Bootstrap Login CLI cannot parse its arguments. */
+export class LoginArgsError extends Error {
+	readonly code: LoginArgsErrorCode
+
+	constructor(code: LoginArgsErrorCode, message: string) {
+		super(message)
+		this.name = "LoginArgsError"
+		this.code = code
+	}
+}
+
+type OptionName = "upstream" | "outPath"
+
+const OPTIONS = [
+	{ name: "upstream", flag: "--upstream" },
+	{ name: "outPath", flag: "--out" },
+] as const
+
 /** Parses `--upstream` and `--out` in either order and in `--flag=value` form. */
 export function parseLoginArgs(
 	args: readonly string[],
 	upstreams: readonly UpstreamConfig[],
 ): LoginTarget {
-	const options = parseOptions(args)
+	const options = readOptions(args)
 	const upstream = upstreams.find((candidate) => candidate.name === options.upstream)
 	if (upstream === undefined) {
 		const names = upstreams.map((candidate) => candidate.name).join(", ")
-		throw new Error(`Unknown Upstream "${options.upstream}"; expected one of ${names}`)
+		throw new LoginArgsError(
+			"upstream_unknown",
+			`Unknown Upstream "${options.upstream}"; expected one of ${names}`,
+		)
 	}
 	return Object.freeze({ upstream, outPath: options.outPath ?? upstream.tokenFile })
 }
 
-interface LoginOptions {
+interface ReadOptions {
 	readonly upstream: string
 	readonly outPath: string | undefined
 }
 
-type OptionName = "upstream" | "outPath"
-
-interface ParsedOptions {
-	upstream?: string
-	outPath?: string
-}
-
-function parseOptions(args: readonly string[]): LoginOptions {
-	const options = readOptions(args)
-	if (options.upstream === undefined) throw new Error("--upstream <name> is required")
-	return { upstream: options.upstream, outPath: options.outPath }
-}
-
-const INLINE_FLAGS = [
-	["upstream", "--upstream="],
-	["outPath", "--out="],
-] as const
-
-function readOptions(args: readonly string[]): ParsedOptions {
-	const options: ParsedOptions = {}
+function readOptions(args: readonly string[]): ReadOptions {
+	const options: { upstream?: string; outPath?: string } = {}
 	for (let index = 0; index < args.length; ) {
 		const [name, value, consumed] = readOption(args, index)
 		options[name] = value
 		index += consumed
 	}
-	return options
+	if (options.upstream === undefined) {
+		throw new LoginArgsError("upstream_missing", "--upstream <name> is required")
+	}
+	return { upstream: options.upstream, outPath: options.outPath }
 }
 
 function readOption(args: readonly string[], index: number): [OptionName, string, number] {
 	const argument = args[index] ?? ""
-	for (const [name, flag] of INLINE_FLAGS) {
-		if (argument.startsWith(flag)) return [name, inlineValue(argument, flag), 1]
+	for (const option of OPTIONS) {
+		const inlinePrefix = `${option.flag}=`
+		if (argument.startsWith(inlinePrefix)) {
+			return [option.name, requireValue(argument.slice(inlinePrefix.length), option.flag), 1]
+		}
+		if (argument === option.flag)
+			return [option.name, requireValue(args[index + 1], option.flag), 2]
 	}
-	const inlineName = argument === "--upstream" ? "upstream" : undefined
-	const name = argument === "--out" ? "outPath" : inlineName
-	if (name === undefined) throw new Error(`Unknown argument: ${argument}`)
-	const value = args[index + 1]
-	if (value === undefined || value.length === 0) throw new Error(`${argument} requires a value`)
-	return [name, value, 2]
+	throw new LoginArgsError("option_unknown", `Unknown argument: ${argument}`)
 }
 
-function inlineValue(argument: string, flag: string): string {
-	const value = argument.slice(flag.length)
-	if (value.length === 0) throw new Error(`${flag.slice(0, -1)} requires a value`)
+function requireValue(value: string | undefined, flag: string): string {
+	if (value === undefined || value.length === 0) {
+		throw new LoginArgsError("option_value_missing", `${flag} requires a value`)
+	}
 	return value
 }

@@ -12,8 +12,8 @@ import {
 	sendCallback,
 } from "../testing/login-fixtures"
 import { runBootstrapLogin } from "./bootstrap-login"
-import { authorizationServerMetadataUrls } from "./discovery"
 import { BootstrapLoginError } from "./errors"
+import { authorizationServerMetadataUrls } from "./metadata-urls"
 
 const ISSUER = "https://auth.example.com/auth/v1"
 const RESOURCE = "https://api.mobbin.com/mcp"

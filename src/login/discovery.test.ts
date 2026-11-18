@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test"
 import { fetchStub } from "../testing/login-fixtures"
-import { authorizationServerMetadataUrls, discoverAuthorizationServer } from "./discovery"
+import { discoverAuthorizationServer } from "./discovery"
 import { BootstrapLoginError } from "./errors"
+import { authorizationServerMetadataUrls } from "./metadata-urls"
 
 const ISSUER = "https://auth.example.com/auth/v1"
 const METADATA = {

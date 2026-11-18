@@ -9,7 +9,7 @@ import {
 	upstreamFailureResponse,
 } from "./jsonrpc-error"
 import { TokenRefreshError } from "./token-refresh-error"
-import { isTokenFileUnusable, TokenStoreError } from "./token-store-error"
+import { TokenStoreError, type TokenStoreErrorCode } from "./token-store-error"
 
 /** Internal proxy context: the injected fetch, clock and request ceiling. */
 export interface GatewayProxyContext {
@@ -75,11 +75,17 @@ async function accessTokenFor(
 	}
 }
 
+const UNUSABLE_TOKEN_FILE_CODES = new Set<TokenStoreErrorCode>([
+	"token_file_missing",
+	"token_file_unreadable",
+	"token_file_corrupt",
+])
+
 function tokenFailureResponse(id: JsonRpcId, upstream: GatewayUpstream, error: unknown): Response {
 	if (error instanceof TokenRefreshError && error.code === "refresh_token_revoked") {
 		return revokedRefreshTokenResponse(id, upstream)
 	}
-	if (error instanceof TokenStoreError && isTokenFileUnusable(error.code)) {
+	if (error instanceof TokenStoreError && UNUSABLE_TOKEN_FILE_CODES.has(error.code)) {
 		return tokenFileUnusableResponse(id, upstream, error.code)
 	}
 	return upstreamFailureResponse(id)

@@ -63,7 +63,7 @@ export function tokenFileUnusableResponse(
 		`${upstream.displayName} Token File at "${upstream.tokenFile}" cannot be used. ` +
 		`Run \`${upstream.loginCommand}\` to install it. ` +
 		`See the runbook at ${RUNBOOK_URL}.`
-	return jsonRpcErrorResponse(id, -32002, message, 502, { tokenFile: code })
+	return jsonRpcErrorResponse(id, -32002, message, 502, { tokenFileCode: code })
 }
 
 /** Builds a sanitized JSON-RPC error for an unreachable or failing Upstream. */
